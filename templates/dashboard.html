@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — MT5 Zone Feed{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>Interesting Zones</h1>
+    <p>Active zones feed MT5 confluence engine via <code style="font-size:12px;color:var(--teal);">/api/zones</code></p>
+  </div>
+  <a href="{{ url_for('add_zone') }}" class="btn btn-primary">+ Add Zone</a>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat-card">
+    <div class="val" style="color:var(--green);">{{ active_count }}</div>
+    <div class="lbl">Active zones</div>
+  </div>
+  <div class="stat-card">
+    <div class="val" style="color:var(--muted);">{{ inactive_count }}</div>
+    <div class="lbl">Inactive zones</div>
+  </div>
+  <div class="stat-card">
+    <div class="val" style="color:var(--text);">{{ zones|length }}</div>
+    <div class="lbl">Total zones</div>
+  </div>
+  <div class="stat-card">
+    <div class="val" style="color:var(--amber);">
+      {{ zones|selectattr('active')|map(attribute='weight')|sum }}
+    </div>
+    <div class="lbl">Total weight</div>
+  </div>
+</div>
+
+<!-- API endpoint hint -->
+<div class="api-hint" style="margin-bottom:20px;">
+  GET /api/zones?symbol=XAUUSD&amp;active=1&amp;min_weight=2
+</div>
+
+<!-- Zones table -->
+<div class="card" style="padding:0; overflow:hidden;">
+  {% if zones %}
+  <table>
+    <thead>
+      <tr>
+        <th>Symbol</th>
+        <th>Type</th>
+        <th>TF</th>
+        <th>Zone range</th>
+        <th>Weight</th>
+        <th>Status</th>
+        <th>Entered</th>
+        <th>Notes</th>
+        <th style="text-align:right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for zone in zones %}
+    <tr class="{{ 'inactive-row' if not zone.active else '' }}">
+      <td>
+        <span style="font-weight:600; font-size:13px; font-family:monospace; color:var(--teal);">
+          {{ zone.symbol }}
+        </span>
+      </td>
+      <td>
+        {% set type_colors = {
+          'supply':   'badge-red',
+          'demand':   'badge-green',
+          'htf_level':'badge-blue',
+          'liquidity':'badge-amber',
+          'weekly_hl':'badge-teal',
+          'daily_hl': 'badge-teal',
+          'ob_area':  'badge-blue',
+          'fvg_area': 'badge-green',
+          'custom':   'badge-muted',
+        } %}
+        <span class="badge {{ type_colors.get(zone.zone_type, 'badge-muted') }}">
+          {{ zone_types.get(zone.zone_type, zone.zone_type) }}
+        </span>
+      </td>
+      <td><span class="badge badge-muted">{{ zone.timeframe }}</span></td>
+      <td class="price-range">
+        {{ "%.5f"|format(zone.low) }} – {{ "%.5f"|format(zone.high) }}
+      </td>
+      <td>
+        <div class="pips">
+          {% for i in range(1, 5) %}
+            <div class="pip {{ 'on' if i <= zone.weight else '' }}"></div>
+          {% endfor %}
+        </div>
+      </td>
+      <td>
+        <span class="badge {{ 'badge-green' if zone.active else 'badge-muted' }}">
+          {{ 'Active' if zone.active else 'Off' }}
+        </span>
+      </td>
+      <td style="font-size:12px; color:var(--muted); white-space:nowrap;">
+        {{ zone.created_at[:16] }}
+      </td>
+      <td style="font-size:12px; color:var(--muted); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+        {{ zone.notes or '—' }}
+      </td>
+      <td style="text-align:right; white-space:nowrap;">
+        <form method="POST" action="{{ url_for('toggle_zone', zone_id=zone.id) }}" style="display:inline;">
+          <button type="submit" class="btn btn-ghost btn-sm">
+            {{ 'Deactivate' if zone.active else 'Activate' }}
+          </button>
+        </form>
+        <form method="POST" action="{{ url_for('delete_zone', zone_id=zone.id) }}" style="display:inline;" onsubmit="return confirm('Delete this zone?')">
+          <button type="submit" class="btn btn-danger btn-sm">Del</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:48px; text-align:center; color:var(--muted);">
+    No zones yet. <a href="{{ url_for('add_zone') }}" style="color:var(--accent);">Add your first zone →</a>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

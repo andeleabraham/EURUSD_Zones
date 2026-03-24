@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Add Zone — LiquidScan{% endblock %}
+{% block head %}
+<style>
+.form-wrap{max-width:720px}
+.page-title{font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:1.2rem}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:580px){.fg{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:.3rem}
+.field.full{grid-column:1/-1}
+label{font-size:.65rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+input,select,textarea{background:var(--bg);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:'DM Mono',monospace;font-size:.85rem;padding:.5rem .75rem;transition:border-color .15s;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+textarea{min-height:72px;resize:vertical}
+select option{background:var(--surf)}
+.form-footer{display:flex;gap:.7rem;align-items:center;margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--border)}
+.hint{font-size:.7rem;color:var(--muted);margin-top:.3rem;font-family:'DM Mono',monospace}
+</style>
+{% endblock %}
+{% block content %}
+<div class="form-wrap">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem">
+    <div class="page-title">Add Interesting Zone</div>
+    <a href="/zones" class="btn">← Back</a>
+  </div>
+
+  <div class="card">
+    <form method="POST" action="/zones/add">
+      <div class="fg">
+
+        <div class="field">
+          <label>Symbol</label>
+          <select name="symbol">
+            {% for s in ['EURUSD','EURUSDC','EURUSDT','GBPUSD','XAUUSD','NAS100'] %}
+            <option value="{{s}}" {{ 'selected' if form.get('symbol','EURUSD')==s }}>{{s}}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Zone Type *</label>
+          <select name="zone_type" required>
+            <option value="">— Select —</option>
+            {% for v,l in [
+              ('Supply Zone','Supply / Resistance'),
+              ('Demand Zone','Demand / Support'),
+              ('Liquidity','Liquidity Pool / EQH / EQL'),
+              ('HTF Structure','HTF Structural Level'),
+              ('Weekly High/Low','Weekly High or Low'),
+              ('Daily High/Low','Daily High or Low'),
+              ('OB','Order Block'),
+              ('FVG','Fair Value Gap'),
+              ('Custom','Custom / Other'),
+            ] %}
+            <option value="{{v}}" {{ 'selected' if form.get('zone_type')==v }}>{{l}}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Zone High (Top Price) *</label>
+          <input type="number" step="any" name="price_high" placeholder="e.g. 1.09500" value="{{ form.get('price_high','') }}" required>
+        </div>
+
+        <div class="field">
+          <label>Zone Low (Bottom Price) *</label>
+          <input type="number" step="any" name="price_low" placeholder="e.g. 1.09350" value="{{ form.get('price_low','') }}" required>
+        </div>
+
+        <div class="field">
+          <label>Timeframe</label>
+          <select name="timeframe">
+            {% for tf in ['M1','M5','M15','M30','H1','H4','D1','W1','MN'] %}
+            <option value="{{tf}}" {{ 'selected' if form.get('timeframe','D1')==tf }}>{{tf}}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Bias</label>
+          <select name="bias">
+            <option value="neutral" {{ 'selected' if form.get('bias','neutral')=='neutral' }}>Neutral</option>
+            <option value="bullish" {{ 'selected' if form.get('bias')=='bullish' }}>Bullish</option>
+            <option value="bearish" {{ 'selected' if form.get('bias')=='bearish' }}>Bearish</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Weight (Confluence Strength)</label>
+          <select name="weight">
+            <option value="1" {{ 'selected' if form.get('weight','2')=='1' }}>1 — Weak (custom reference)</option>
+            <option value="2" {{ 'selected' if form.get('weight','2') in ('','2') }}>2 — Moderate (daily S&amp;D)</option>
+            <option value="3" {{ 'selected' if form.get('weight','2')=='3' }}>3 — Strong (HTF / weekly)</option>
+            <option value="4" {{ 'selected' if form.get('weight','2')=='4' }}>4 — Very strong (monthly)</option>
+            <option value="5" {{ 'selected' if form.get('weight','2')=='5' }}>5 — Bold bet target</option>
+          </select>
+          <div class="hint">Higher weight → higher confluence score → bolder MT5 signal</div>
+        </div>
+
+        <div class="field">
+          <label>Added by</label>
+          <input type="text" name="created_by" placeholder="admin" value="{{ form.get('created_by','admin') }}">
+        </div>
+
+        <div class="field full">
+          <label>Notes</label>
+          <textarea name="notes" placeholder="e.g. Previous week high, confluent with 4H OB, major liquidity above equal highs…">{{ form.get('notes','') }}</textarea>
+        </div>
+
+      </div>
+      <div class="form-footer">
+        <button type="submit" class="btn btn-green" style="min-width:120px">Save Zone</button>
+        <a href="/zones" class="btn">Cancel</a>
+        <span style="color:var(--muted);font-size:.7rem;margin-left:.5rem;font-family:'DM Mono',monospace">⏱ Timestamp auto-captured (UTC)</span>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

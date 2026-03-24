@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{% block title %}LiquidScan{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #07090f;
+  --bg2:      #0c1018;
+  --surf:     #111620;
+  --surf2:    #161d2a;
+  --border:   #1c2436;
+  --border2:  #253050;
+  --text:     #c0cce6;
+  --muted:    #485878;
+  --faint:    #253050;
+  --acc:      #3de8a0;
+  --acc2:     #2bc4e8;
+  --bid:      #22c55e;
+  --bid-dim:  #0d2018;
+  --ask:      #ef4444;
+  --ask-dim:  #200d0d;
+  --warn:     #f59e0b;
+  --r:6px; --r2:10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;display:flex;flex-direction:column}
+a{color:var(--acc);text-decoration:none}
+a:hover{color:var(--acc2)}
+.mono{font-family:'DM Mono',monospace}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+header{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 1.5rem;display:flex;align-items:center;
+  justify-content:space-between;height:52px;
+  position:sticky;top:0;z-index:100;gap:1rem;
+}
+.logo{font-weight:700;font-size:1rem;color:#fff;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.logo-icon{width:20px;height:20px;border:1.5px solid var(--acc);border-radius:4px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.logo-icon::before{content:'';position:absolute;bottom:0;left:0;right:0;height:45%;background:var(--acc);opacity:.2}
+.logo-icon::after{content:'';width:6px;height:6px;background:var(--acc);border-radius:50%;box-shadow:0 0 5px var(--acc)}
+
+nav{display:flex;gap:2px;overflow-x:auto;flex-shrink:1}
+nav a{padding:4px 10px;border-radius:var(--r);font-size:.78rem;font-weight:600;color:var(--muted);white-space:nowrap;transition:color .15s,background .15s;font-family:'DM Mono',monospace}
+nav a:hover{color:var(--text);background:var(--surf)}
+nav a.active{color:var(--acc);background:var(--surf2)}
+
+.live-chip{display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+.ldot{width:6px;height:6px;border-radius:50%;background:var(--acc);box-shadow:0 0 5px var(--acc);animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+main{flex:1;padding:1.5rem;max-width:1440px;margin:0 auto;width:100%}
+
+.btn{display:inline-flex;align-items:center;gap:5px;padding:.32rem .85rem;border-radius:var(--r);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--muted);transition:all .15s}
+.btn:hover{color:var(--text);background:var(--surf2)}
+.btn.on{color:var(--acc);border-color:var(--acc);background:#3de8a012}
+.btn-green{background:var(--acc);color:#000;border-color:var(--acc);font-weight:600}
+.btn-green:hover{background:var(--acc2);border-color:var(--acc2);color:#000}
+.btn-red{color:var(--ask);border-color:var(--ask)}
+.btn-warn{color:var(--warn);border-color:var(--warn)}
+
+.card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:1.1rem}
+.sec-lbl{font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+.sec-lbl::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.alerts{margin-bottom:1rem;display:flex;flex-direction:column;gap:.4rem}
+.alert{padding:.5rem .9rem;border-radius:var(--r);font-size:.82rem;border-left:2px solid}
+.alert-success{background:#3de8a012;border-color:var(--acc);color:var(--acc)}
+.alert-error{background:#ef444412;border-color:var(--ask);color:var(--ask)}
+
+footer{padding:.9rem 1.5rem;text-align:center;color:var(--faint);font-size:.7rem;border-top:1px solid var(--border);font-family:'DM Mono',monospace}
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header>
+  <a href="/" class="logo" style="text-decoration:none">
+    <div class="logo-icon"></div>LiquidScan
+  </a>
+  <nav>
+    <a href="/" class="{% if request.endpoint=='index' %}active{% endif %}">Dashboard</a>
+    <a href="/liquidity" class="{% if request.endpoint=='liquidity_page' %}active{% endif %}">Liquidity</a>
+    <a href="/depth" class="{% if request.endpoint=='depth_page' %}active{% endif %}">Depth</a>
+    <a href="/levels" class="{% if request.endpoint=='levels_page' %}active{% endif %}">Levels</a>
+    <a href="/zones" class="{% if 'zone' in request.endpoint %}active{% endif %}">Zones</a>
+    <a href="/api/zones" target="_blank">API</a>
+  </nav>
+  <div class="live-chip"><div class="ldot" id="ldot"></div><span id="ltxt">connecting</span></div>
+</header>
+<main>
+  {% if get_flashed_messages() %}
+  <div class="alerts">
+    {% for cat,msg in get_flashed_messages(with_categories=true) %}
+    <div class="alert alert-{{cat}}">{{msg}}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer>LiquidScan · EURUSDC + EURUSDT · Binance API · Zones feed MT5 bots · UTC</footer>
+<script>
+function setLive(ok){
+  const d=document.getElementById('ldot'),t=document.getElementById('ltxt');
+  if(!d)return;
+  d.style.background=ok?'var(--acc)':'var(--ask)';
+  d.style.boxShadow=ok?'0 0 5px var(--acc)':'0 0 5px var(--ask)';
+  t.textContent=ok?'live':'error';
+}
+function fmt(n,d){if(n===null||n===undefined||isNaN(n))return'—';return parseFloat(n).toFixed(d??4)}
+function fmtK(n){if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return parseFloat(n).toFixed(2)}
+function pct(price,ref){const d=((price-ref)/ref*100);return(d>=0?'+':'')+d.toFixed(3)+'%'}
+function timeAgo(s){const d=new Date(s+'Z'),now=new Date(),m=Math.floor((now-d)/60000);if(m<1)return'just now';if(m<60)return m+'m ago';return Math.floor(m/60)+'h ago'}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Zones — LiquidScan{% endblock %}
+{% block head %}
+<style>
+.zones-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.8rem}
+.page-title{font-size:1.2rem;font-weight:700;color:#fff}
+.page-sub{font-size:.78rem;color:var(--muted);margin-top:.2rem}
+.api-strip{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:.5rem .9rem;font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-bottom:1.2rem;display:flex;gap:1.2rem;flex-wrap:wrap}
+.api-strip span{color:var(--acc2)}
+.zones-tbl{width:100%;border-collapse:collapse;font-size:.82rem}
+.zones-tbl thead th{text-align:left;padding:.45rem .7rem;font-size:.65rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);font-family:'DM Mono',monospace}
+.zones-tbl tbody tr{border-bottom:1px solid var(--border);transition:background .12s}
+.zones-tbl tbody tr:hover{background:var(--surf2)}
+.zones-tbl tbody tr.off{opacity:.4}
+.zones-tbl td{padding:.5rem .7rem;vertical-align:middle}
+.sdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.4rem;vertical-align:middle}
+.sdot.on{background:var(--bid);box-shadow:0 0 5px var(--bid)}
+.sdot.off{background:var(--muted)}
+.badge{display:inline-block;padding:.12rem .45rem;border-radius:3px;font-size:.65rem;font-weight:600;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.03em}
+.badge-supply{background:var(--ask-dim);color:var(--ask);border:1px solid #ef444430}
+.badge-demand{background:var(--bid-dim);color:var(--bid);border:1px solid #22c55e30}
+.badge-liq{background:#a78bfa18;color:#a78bfa;border:1px solid #a78bfa30}
+.badge-htf{background:#f59e0b18;color:var(--warn);border:1px solid #f59e0b30}
+.badge-custom{background:#38bdf818;color:#38bdf8;border:1px solid #38bdf830}
+.pip{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:2px}
+.w1{background:var(--muted)} .w2{background:#38bdf8} .w3{background:var(--bid)} .w4{background:var(--warn)} .w5{background:var(--ask)}
+.action-cell{display:flex;gap:.35rem;align-items:center}
+.empty-state{text-align:center;padding:3rem;color:var(--muted);font-size:.85rem}
+</style>
+{% endblock %}
+{% block content %}
+<div class="zones-header">
+  <div>
+    <div class="page-title">Interesting Zones</div>
+    <div class="page-sub">{{ zones|length }} zone(s) · Pulled by MT5 bot via /api/zones</div>
+  </div>
+  <a href="/zones/add" class="btn btn-green">+ Add Zone</a>
+</div>
+
+<div class="api-strip">
+  MT5 endpoint: <span>GET /api/zones?symbol=EURUSD&active=1</span>
+  &nbsp;·&nbsp; Confluence: <span>GET /api/zones/walls?symbol=EURUSDC</span>
+  &nbsp;·&nbsp; Min weight: <span>&min_weight=3</span>
+</div>
+
+{% if zones %}
+<div class="card" style="padding:0;overflow:hidden">
+  <div style="overflow-x:auto">
+    <table class="zones-tbl">
+      <thead><tr>
+        <th>#</th><th>Symbol</th><th>Type</th><th>Range</th>
+        <th>TF</th><th>Bias</th><th>Weight</th><th>Notes</th>
+        <th>By</th><th>Created</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        {% for z in zones %}
+        <tr class="{{ 'off' if not z.active }}">
+          <td class="mono" style="color:var(--muted)">{{z.id}}</td>
+          <td><span class="sdot {{ 'on' if z.active else 'off' }}"></span><strong style="color:#fff">{{z.symbol}}</strong></td>
+          <td>
+            {% set zt = z.zone_type|lower %}
+            {% if 'supply' in zt %}<span class="badge badge-supply">Supply</span>
+            {% elif 'demand' in zt %}<span class="badge badge-demand">Demand</span>
+            {% elif 'liq' in zt %}<span class="badge badge-liq">Liquidity</span>
+            {% elif 'htf' in zt or 'struct' in zt %}<span class="badge badge-htf">HTF</span>
+            {% else %}<span class="badge badge-custom">{{z.zone_type}}</span>{% endif %}
+          </td>
+          <td class="mono">
+            <span style="color:var(--ask)">{{"%g"|format(z.price_high)}}</span>
+            <span style="color:var(--muted)"> / </span>
+            <span style="color:var(--bid)">{{"%g"|format(z.price_low)}}</span>
+          </td>
+          <td class="mono" style="color:var(--muted)">{{z.timeframe}}</td>
+          <td>
+            {% if z.bias=='bullish' %}<span style="color:var(--bid)">▲</span>
+            {% elif z.bias=='bearish' %}<span style="color:var(--ask)">▼</span>
+            {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+          </td>
+          <td>
+            {% for i in range(z.weight) %}<span class="pip w{{z.weight}}"></span>{% endfor %}
+            <span class="mono" style="color:var(--muted);font-size:.7rem"> {{z.weight}}/5</span>
+          </td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:.78rem">{{z.notes or '—'}}</td>
+          <td class="mono" style="color:var(--muted);font-size:.72rem">{{z.created_by}}</td>
+          <td class="mono" style="color:var(--muted);font-size:.7rem;white-space:nowrap">{{z.created_at}}</td>
+          <td>
+            <div class="action-cell">
+              <form method="POST" action="/zones/toggle/{{z.id}}">
+                <button type="submit" class="btn {{ 'btn-warn' if z.active else '' }}">{{ 'Pause' if z.active else 'Resume' }}</button>
+              </form>
+              <form method="POST" action="/zones/delete/{{z.id}}" onsubmit="return confirm('Delete?')">
+                <button type="submit" class="btn btn-red">Del</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card empty-state">
+  <div style="font-size:1.5rem;margin-bottom:.5rem">📍</div>
+  <div style="color:var(--text);font-weight:600;margin-bottom:.4rem">No zones yet</div>
+  <div style="margin-bottom:1rem">Add your first interesting zone to feed the MT5 bot.</div>
+  <a href="/zones/add" class="btn btn-green">+ Add Zone</a>
+</div>
+{% endif %}
+{% endblock %}

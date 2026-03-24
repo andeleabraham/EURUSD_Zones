@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% block title %}Liquidity Zones — LiquidScan{% endblock %}
+{% block head %}
+<style>
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.8rem}
+.page-title{font-size:1.1rem;font-weight:700;color:#fff}
+.page-sub{font-size:.75rem;color:var(--muted);margin-top:.2rem;font-family:'DM Mono',monospace}
+
+.top-strip{display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;margin-bottom:1rem;padding:.7rem 1rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r2)}
+.px-pair{display:flex;align-items:baseline;gap:.4rem}
+.px-sym{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace}
+.px-val{font-size:1.1rem;font-weight:500;font-family:'DM Mono',monospace;color:#fff}
+.px-val.up{color:var(--bid)}
+.px-val.dn{color:var(--ask)}
+.cd{font-size:.75rem;font-family:'DM Mono',monospace;color:var(--muted);margin-left:auto}
+.cd span{color:var(--text)}
+
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:1rem}
+.filter-bar .lbl{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+.sep{width:1px;height:18px;background:var(--border)}
+.result-hint{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;margin-left:auto}
+
+.meta-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem}
+@media(max-width:600px){.meta-tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:.75rem .9rem}
+.tile-lbl{font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.25rem}
+.tile-val{font-size:1.1rem;font-weight:600;color:#fff;font-family:'DM Mono',monospace}
+
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin:1rem 0 .5rem}
+.sec-lbl2{font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace}
+.sec-sub{font-size:.65rem;color:var(--faint);font-family:'DM Mono',monospace}
+
+.zone-list{display:flex;flex-direction:column;gap:3px}
+.zone-row{display:grid;grid-template-columns:22px 110px 1fr 80px 70px 70px;align-items:center;gap:8px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--surf);transition:background .12s}
+.zone-row:hover{background:var(--surf2)}
+.zone-row.is-wall{border-color:var(--border2)}
+@media(max-width:700px){.zone-row{grid-template-columns:22px 100px 1fr 70px 60px}}
+
+.zrank{font-size:.68rem;color:var(--faint);text-align:right;font-family:'DM Mono',monospace}
+.zprice{font-size:.82rem;font-weight:500;font-family:'DM Mono',monospace}
+.zprice.bid{color:var(--bid)}
+.zprice.ask{color:var(--ask)}
+.wall-tag{font-size:.58rem;padding:1px 4px;border-radius:3px;font-weight:600;margin-left:3px;vertical-align:middle}
+.wall-tag.bid{background:var(--bid-dim);color:var(--bid);border:1px solid #22c55e30}
+.wall-tag.ask{background:var(--ask-dim);color:var(--ask);border:1px solid #ef444430}
+.sym-tag{font-size:.58rem;padding:1px 4px;border-radius:3px;background:var(--surf2);color:var(--muted);border:1px solid var(--border);margin-left:3px;vertical-align:middle}
+
+.bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;opacity:.65}
+.bar-fill.bid{background:var(--bid)}
+.bar-fill.ask{background:var(--ask)}
+.bar-fill.wall{opacity:1}
+
+.zqty{font-size:.78rem;color:var(--text);text-align:right;font-family:'DM Mono',monospace}
+.zdist{font-size:.72rem;text-align:right;font-family:'DM Mono',monospace}
+.zdist.near{color:var(--warn)}
+.zdist.far{color:var(--muted)}
+.zpct{font-size:.68rem;text-align:right;color:var(--muted);font-family:'DM Mono',monospace}
+
+.empty{padding:2rem;text-align:center;color:var(--muted);font-size:.82rem;font-family:'DM Mono',monospace}
+.loading-msg{padding:2rem;text-align:center;color:var(--muted);font-size:.82rem;font-family:'DM Mono',monospace;display:flex;align-items:center;justify-content:center;gap:.5rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--muted);border-radius:50%;animation:spin .7s linear infinite}
+
+.api-note{margin-top:1rem;padding:.6rem .9rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r);font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted)}
+.api-note span{color:var(--acc2)}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-hdr">
+  <div>
+    <div class="page-title">Liquidity zones</div>
+    <div class="page-sub">Top 150 bids + asks · deduplicated · sorted by size · pulled every 15 min</div>
+  </div>
+  <button class="btn btn-green" onclick="manualPull()">↻ Pull now</button>
+</div>
+
+<!-- Live prices + countdown -->
+<div class="top-strip">
+  {% for sym in symbols %}
+  <div class="px-pair">
+    <span class="px-sym">{{ sym[:3] }}/{{ sym[3:] }}</span>
+    <span class="px-val" id="px-{{ sym }}">—</span>
+  </div>
+  {% endfor %}
+  <div class="cd">Next pull in <span id="cd-val">—</span></div>
+  <div style="font-size:.6rem;font-family:'DM Mono',monospace;padding:2px 7px;border-radius:3px;background:var(--surf);color:var(--muted);border:1px solid var(--border)" id="liq-src">src —</div>
+  <div style="display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace">
+    <div class="ldot" id="pull-dot" style="animation:none;background:var(--muted)"></div>
+    <span id="pull-txt">waiting</span>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+  <span class="lbl">Min qty (EUR):</span>
+  <button class="btn active" onclick="setF('qty',0,this)">Any</button>
+  <button class="btn" onclick="setF('qty',10,this)">10+</button>
+  <button class="btn" onclick="setF('qty',50,this)">50+</button>
+  <button class="btn" onclick="setF('qty',100,this)">100+</button>
+
+  <div class="sep"></div>
+  <span class="lbl">Min gap:</span>
+  <button class="btn" onclick="setF('gap',0,this)">Any</button>
+    <button class="btn active" onclick="setF('gap',0.001,this)">10+ pips</button>
+    <button class="btn" onclick="setF('gap',0.002,this)">20+ pips</button>
+  <button class="btn" onclick="setF('gap',0.005,this)">50+ pips</button>
+  <button class="btn" onclick="setF('gap',0.010,this)">100+ pips</button>
+
+  <div class="sep"></div>
+  <span class="lbl">Side:</span>
+  <button class="btn active" onclick="setF('side','all',this)">Both</button>
+  <button class="btn" onclick="setF('side','bid',this)">Bids</button>
+  <button class="btn" onclick="setF('side','ask',this)">Asks</button>
+
+  <span class="result-hint" id="result-hint">—</span>
+</div>
+
+<!-- Meta tiles -->
+<div class="meta-tiles">
+  <div class="tile"><div class="tile-lbl">Levels pulled</div><div class="tile-val" id="m-pulled">—</div></div>
+  <div class="tile"><div class="tile-lbl">After filters</div><div class="tile-val" id="m-filtered">—</div></div>
+  <div class="tile"><div class="tile-lbl">Biggest wall</div><div class="tile-val" id="m-biggest">—</div></div>
+  <div class="tile"><div class="tile-lbl">Mid price</div><div class="tile-val" id="m-mid">—</div></div>
+</div>
+
+<!-- Zone tables -->
+<div id="zone-body">
+  <div class="loading-msg"><div class="spinner"></div> Pulling order book…</div>
+</div>
+
+<!-- API note for MT5 bot -->
+<div class="api-note">
+  MT5 bot endpoint: <span>GET /api/liquidity_zones</span> &nbsp;·&nbsp;
+  params: <span>min_qty=10&min_gap=0.002&side=all&limit=40</span> &nbsp;·&nbsp;
+  cached 15 min server-side
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SYMBOLS   = {{ symbols | tojson }};
+const INTERVAL  = 15 * 60 * 1000;
+let filters     = { qty: 0, gap: 0.001, side: 'all' };
+let lastData    = null;
+let pullEnd     = null;
+let cdTimer     = null;
+let prevPx      = {};
+
+function setF(key, val, btn) {
+  filters[key] = val;
+  const groups = {
+    qty:  ['Any','10+','50+','100+'],
+    gap:  ['Any','10+ pips','20+ pips','50+ pips','100+ pips'],
+    side: ['Both','Bids','Asks'],
+  };
+  document.querySelectorAll('.filter-bar .btn').forEach(b => {
+    if (groups[key].includes(b.textContent.trim())) b.classList.remove('active');
+  });
+  btn.classList.add('active');
+  renderFiltered();
+}
+
+function fmtNum(n, d) { return parseFloat(n).toFixed(d ?? 4); }
+function fmtK(n) { return n >= 1000 ? (n/1000).toFixed(1)+'K' : parseFloat(n).toFixed(1); }
+
+async function doPull() {
+  setPullStatus('pulling');
+  try {
+    const res  = await fetch('/api/liquidity_zones?min_qty=0&min_gap=0&side=all&limit=300');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    lastData = data;
+
+    // Update live prices from mid
+    if (data.mid_price) {
+      document.getElementById('m-mid').textContent = fmtNum(data.mid_price, 5);
+    }
+
+    // Fetch live tickers separately for the price strip
+    loadTickers();
+
+    document.getElementById('m-pulled').textContent = data.total_found || data.count;
+    const liqSrc = document.getElementById('liq-src');
+    if (liqSrc && data.source) {
+      liqSrc.textContent = 'src: ' + data.source;
+      liqSrc.style.color = data.source === 'binance' ? '#22c55e' : data.source === 'kraken' ? '#2bc4e8' : '#f59e0b';
+    }
+
+    setPullStatus('ok');
+    startCountdown();
+    renderFiltered();
+  } catch(e) {
+    setPullStatus('err');
+    document.getElementById('zone-body').innerHTML =
+      '<div class="empty">Failed to fetch. Check connection.</div>';
+  }
+}
+
+async function loadTickers() {
+  try {
+    const res  = await fetch('/api/ticker');
+    const data = await res.json();
+    data.forEach(t => {
+      if (t.error) return;
+      const prev = prevPx[t.symbol];
+      prevPx[t.symbol] = t.price;
+      const el = document.getElementById('px-' + t.symbol);
+      if (!el) return;
+      el.textContent = fmtNum(t.price, 4);
+      el.className   = 'px-val ' + (prev === undefined ? '' : t.price >= prev ? 'up' : 'dn');
+    });
+  } catch(e) {}
+}
+
+function renderFiltered() {
+  if (!lastData || !lastData.levels) return;
+
+  const mid = lastData.mid_price || 0;
+  let levels = lastData.levels;
+
+  // Apply filters client-side (data already pulled in full)
+  if (filters.side !== 'all') levels = levels.filter(lv => lv.side === filters.side);
+  if (filters.qty  >  0)      levels = levels.filter(lv => lv.qty  >= filters.qty);
+  if (filters.gap  >  0 && mid > 0) levels = levels.filter(lv => lv.dist >= filters.gap);
+
+  // Re-sort by qty descending after filtering
+  levels = [...levels].sort((a, b) => b.qty - a.qty).slice(0, 40);
+
+  const maxQty = levels.length ? levels[0].qty : 1;
+  document.getElementById('m-filtered').textContent = levels.length;
+  document.getElementById('m-biggest').textContent  = levels.length ? fmtK(levels[0].qty) + ' EUR' : '—';
+  document.getElementById('result-hint').textContent = `showing top ${levels.length} zones`;
+
+  if (!levels.length) {
+    document.getElementById('zone-body').innerHTML =
+      '<div class="empty">No levels match — try relaxing the filters.</div>';
+    return;
+  }
+
+  const bids = levels.filter(lv => lv.side === 'bid');
+  const asks = levels.filter(lv => lv.side === 'ask');
+
+  function rows(lvls, side) {
+    if (!lvls.length) return '';
+    return lvls.map((lv, i) => {
+      const pct  = (lv.qty / maxQty * 100).toFixed(1);
+      const isW  = lv.qty >= maxQty * 0.4;
+      const dist = lv.dist ?? (mid ? Math.abs(lv.price - mid) : 0);
+      const far  = dist >= 0.005;
+      const symShort = (lv.symbol || '').replace('EUR','').toLowerCase();
+      return `<div class="zone-row ${isW?'is-wall':''}">
+        <span class="zrank">${i+1}</span>
+        <span class="zprice ${side}">
+          ${fmtNum(lv.price,4)}
+          ${isW ? `<span class="wall-tag ${side}">WALL</span>` : ''}
+          <span class="sym-tag">${symShort}</span>
+        </span>
+        <div class="bar-track">
+          <div class="bar-fill ${side} ${isW?'wall':''}" style="width:${pct}%"></div>
+        </div>
+        <span class="zqty">${fmtK(lv.qty)}</span>
+        <span class="zdist ${far?'far':'near'}">${fmtNum(dist,5)}</span>
+        <span class="zpct">${lv.dist_pct ? lv.dist_pct.toFixed(3)+'%' : '—'}</span>
+      </div>`;
+    }).join('');
+  }
+
+  let html = '';
+
+  if (bids.length) {
+    html += `<div class="sec-hdr">
+      <span class="sec-lbl2">Support / downside magnets — bid walls</span>
+      <span class="sec-sub"># · price · size bar · qty (EUR) · dist · dist%</span>
+    </div>
+    <div class="zone-list">${rows(bids,'bid')}</div>`;
+  }
+
+  if (asks.length) {
+    html += `<div class="sec-hdr" style="margin-top:1.2rem">
+      <span class="sec-lbl2">Resistance / upside magnets — ask walls</span>
+      <span class="sec-sub"># · price · size bar · qty (EUR) · dist · dist%</span>
+    </div>
+    <div class="zone-list">${rows(asks,'ask')}</div>`;
+  }
+
+  document.getElementById('zone-body').innerHTML = html;
+}
+
+function startCountdown() {
+  clearInterval(cdTimer);
+  pullEnd = Date.now() + INTERVAL;
+  cdTimer = setInterval(() => {
+    const rem = Math.max(0, Math.round((pullEnd - Date.now()) / 1000));
+    const m   = Math.floor(rem / 60);
+    const s   = (rem % 60).toString().padStart(2, '0');
+    document.getElementById('cd-val').textContent = `${m}:${s}`;
+    if (rem === 0) { clearInterval(cdTimer); doPull(); }
+  }, 1000);
+}
+
+function setPullStatus(state) {
+  const dot = document.getElementById('pull-dot');
+  const txt = document.getElementById('pull-txt');
+  if (state === 'ok') {
+    dot.style.background = 'var(--bid)';
+    dot.style.boxShadow  = '0 0 5px var(--bid)';
+    dot.style.animation  = 'blink 2s ease-in-out infinite';
+    txt.textContent = 'ready · 15m';
+  } else if (state === 'pulling') {
+    dot.style.background = 'var(--warn)';
+    dot.style.boxShadow  = 'none';
+    dot.style.animation  = 'none';
+    txt.textContent = 'pulling…';
+  } else {
+    dot.style.background = 'var(--ask)';
+    dot.style.boxShadow  = 'none';
+    txt.textContent = 'error';
+  }
+}
+
+function manualPull() {
+  clearInterval(cdTimer);
+  doPull();
+}
+
+doPull();
+setInterval(loadTickers, 8000);
+</script>
+{% endblock %}

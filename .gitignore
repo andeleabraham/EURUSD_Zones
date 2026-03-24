@@ -1,0 +1,14 @@
+zones.db
+*.log
+*.zip
+__pycache__/
+*.pyc
+*.pyo
+tmp/
+.DS_Store
+.env
+.env.*
+cgi-bin/
+public/
+.htaccess
+.well-known/

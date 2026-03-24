@@ -1,0 +1,569 @@
+{% extends "base.html" %}
+{% block title %}LiquidScan — Dashboard{% endblock %}
+{% block head %}
+<style>
+.price-strip{display:flex;align-items:center;gap:1.1rem;flex-wrap:wrap;padding:.7rem 1.1rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:1rem}
+.px-block{display:flex;align-items:baseline;gap:.35rem}
+.px-sym{font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace}
+.px-val{font-size:1.5rem;font-weight:500;font-family:'DM Mono',monospace;color:#fff;transition:color .3s}
+.px-val.up{color:var(--bid)} .px-val.dn{color:var(--ask)}
+.px-div{width:1px;height:28px;background:var(--border);flex-shrink:0}
+.px-stat{font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+.px-stat span{color:var(--text);display:block}
+.px-ts{font-size:.63rem;color:var(--faint);font-family:'DM Mono',monospace;margin-left:auto;white-space:nowrap}
+
+/* trend bar */
+.trend-bar{display:flex;align-items:center;gap:.8rem;padding:.55rem 1rem;background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:1rem;flex-wrap:wrap}
+.trend-chip{display:flex;align-items:center;gap:.4rem;font-size:.72rem;font-family:'DM Mono',monospace;padding:.2rem .6rem;border-radius:4px}
+.trend-chip.bull{background:var(--bid-dim);color:var(--bid);border:1px solid #22c55e30}
+.trend-chip.bear{background:var(--ask-dim);color:var(--ask);border:1px solid #ef444430}
+.trend-chip.flat{background:var(--surf);color:var(--muted);border:1px solid var(--border)}
+.trend-dot{width:7px;height:7px;border-radius:50%}
+.trend-chip.bull .trend-dot{background:var(--bid)}
+.trend-chip.bear .trend-dot{background:var(--ask)}
+.trend-chip.flat .trend-dot{background:var(--muted)}
+.td-stat{font-size:.7rem;font-family:'DM Mono',monospace;color:var(--muted)}
+.td-stat b{color:var(--text)}
+
+/* range meter */
+.range-wrap{display:flex;align-items:center;gap:.5rem;flex:1;min-width:160px}
+.range-lbl{font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+.range-track{flex:1;height:6px;background:var(--border);border-radius:3px;position:relative;overflow:visible}
+.range-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--ask),var(--warn),var(--bid))}
+.range-cursor{position:absolute;top:-4px;width:2px;height:14px;background:#fff;border-radius:1px;transform:translateX(-50%)}
+
+/* layout */
+.dash{display:grid;grid-template-columns:1fr 310px;gap:14px;align-items:start}
+@media(max-width:880px){.dash{grid-template-columns:1fr}}
+
+/* chart */
+.chart-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:1rem;margin-bottom:1rem}
+.chart-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;flex-wrap:wrap;gap:.5rem}
+.chart-ttl{font-size:.63rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace}
+.chart-mid{font-size:.72rem;font-family:'DM Mono',monospace;color:var(--acc)}
+#cw{position:relative;width:100%;height:360px;cursor:crosshair}
+#cc{width:100%;height:100%}
+.tip{position:absolute;background:var(--surf2);border:1px solid var(--border2);border-radius:var(--r);padding:5px 9px;font-family:'DM Mono',monospace;font-size:.72rem;color:var(--text);pointer-events:none;white-space:nowrap;display:none;z-index:10}
+
+/* bets */
+.bets-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.55rem;flex-wrap:wrap;gap:.4rem}
+.bets-ttl{font-size:.63rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace}
+.bet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.8rem}
+@media(max-width:600px){.bet-grid{grid-template-columns:1fr}}
+
+.bet-card{border-radius:var(--r2);padding:.85rem .9rem;border:1px solid}
+.bet-card.buy    {border-color:var(--bid);background:var(--bid-dim)}
+.bet-card.sell   {border-color:var(--ask);background:var(--ask-dim)}
+.bet-card.bold-buy {border-color:var(--warn);background:#161000}
+.bet-card.bold-sell{border-color:#a855f7;background:#0e0016}
+
+.bet-action{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace;margin-bottom:.25rem;display:flex;align-items:center;gap:.4rem}
+.bet-card.buy     .bet-action{color:var(--bid)}
+.bet-card.sell    .bet-action{color:var(--ask)}
+.bet-card.bold-buy  .bet-action{color:var(--warn)}
+.bet-card.bold-sell .bet-action{color:#a855f7}
+.bet-pill{font-size:.58rem;padding:1px 5px;border-radius:10px;font-weight:600;vertical-align:middle}
+.bet-card.buy      .bet-pill{background:#0f2a1a;border:1px solid #22c55e30}
+.bet-card.sell     .bet-pill{background:#2a0f0f;border:1px solid #ef444430}
+.bet-card.bold-buy  .bet-pill{background:#161000;border:1px solid #f59e0b40;color:var(--warn)}
+.bet-card.bold-sell .bet-pill{background:#0e0016;border:1px solid #a855f740;color:#a855f7}
+
+.bet-setup{font-size:.78rem;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.25rem;line-height:1.4}
+.bet-setup b{color:var(--text)}
+.bet-range{font-size:.95rem;font-weight:600;font-family:'DM Mono',monospace;color:#fff;margin-bottom:.25rem}
+.bet-pips{font-size:.72rem;font-family:'DM Mono',monospace;color:var(--muted);margin-bottom:.35rem}
+.bet-pips b{color:var(--text)}
+.bet-pl{font-size:.72rem;font-family:'DM Mono',monospace;color:var(--muted);line-height:1.6;margin-bottom:.25rem}
+.bet-pl b{color:#fff}
+.bet-note{font-size:.63rem;color:var(--muted);font-family:'DM Mono',monospace;opacity:.75;line-height:1.4;border-top:1px solid var(--border);padding-top:.3rem;margin-top:.3rem}
+.bet-empty{grid-column:1/-1;text-align:center;padding:1.5rem;color:var(--muted);font-size:.78rem;font-family:'DM Mono',monospace}
+
+/* side */
+.side{display:flex;flex-direction:column;gap:10px}
+.panel{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:.85rem .9rem}
+.panel-ttl{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.6rem}
+.wall-row{display:grid;grid-template-columns:76px 1fr 48px 40px;gap:5px;align-items:center;padding:.28rem .4rem;border-radius:var(--r);margin-bottom:2px}
+.wall-row:hover{background:var(--surf2)}
+.wr-price{font-size:.78rem;font-weight:500;font-family:'DM Mono',monospace}
+.wr-price.bid{color:var(--bid)} .wr-price.ask{color:var(--ask)}
+.wr-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.wr-fill{height:100%;border-radius:3px;opacity:.65}
+.wr-fill.bid{background:var(--bid)} .wr-fill.ask{background:var(--ask)} .wr-fill.wall{opacity:1}
+.wr-qty{font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace;text-align:right}
+.wr-pip{font-size:.65rem;font-family:'DM Mono',monospace;text-align:right}
+.wr-pip.near{color:var(--warn)} .wr-pip.mid_{color:var(--text)} .wr-pip.far{color:var(--muted)}
+.wtag{font-size:.54rem;padding:1px 3px;border-radius:2px;font-weight:600;margin-left:2px;vertical-align:middle}
+.wtag.bid{background:var(--bid-dim);color:var(--bid)} .wtag.ask{background:var(--ask-dim);color:var(--ask)}
+
+.legend{display:flex;gap:.9rem;flex-wrap:wrap;margin:.4rem 0}
+.leg{display:flex;align-items:center;gap:4px;font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace}
+.leg-dot{width:10px;height:4px;border-radius:2px}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--muted);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Price strip -->
+<div class="price-strip">
+  <div class="px-block">
+    <span class="px-sym">EUR/USDC</span>
+    <span class="px-val" id="px-usdc">—</span>
+  </div>
+  <div class="px-div"></div>
+  <div class="px-block">
+    <span class="px-sym">EUR/USDT</span>
+    <span class="px-val" id="px-usdt">—</span>
+  </div>
+  <div class="px-div"></div>
+  <div class="px-stat">Spread<span id="sprd">—</span></div>
+  <div class="px-stat">24h High<span id="hi">—</span></div>
+  <div class="px-stat">24h Low<span id="lo">—</span></div>
+  <div class="px-stat">Open<span id="opn">—</span></div>
+  <div class="px-stat">Change<span id="chg">—</span></div>
+  <div class="px-ts" id="px-ts">—</div>
+  <div style="font-size:.6rem;font-family:'DM Mono',monospace;padding:2px 7px;border-radius:3px;background:var(--surf2);color:var(--muted);border:1px solid var(--border)" id="src-badge">src —</div>
+</div>
+
+<!-- Trend context bar -->
+<div class="trend-bar" id="trend-bar">
+  <div class="trend-chip flat" id="trend-chip">
+    <div class="trend-dot"></div><span id="trend-lbl">loading</span>
+  </div>
+  <div class="td-stat" id="td-pips">—</div>
+  <div class="td-stat" id="td-high">—</div>
+  <div class="td-stat" id="td-low">—</div>
+  <div class="range-wrap">
+    <span class="range-lbl">Day range</span>
+    <div class="range-track">
+      <div class="range-fill" style="width:100%"></div>
+      <div class="range-cursor" id="range-cur" style="left:50%"></div>
+    </div>
+    <span class="range-lbl" id="range-pct">50%</span>
+  </div>
+</div>
+
+<div class="dash">
+  <div>
+    <!-- Chart -->
+    <div class="chart-card">
+      <div class="chart-hdr">
+        <span class="chart-ttl">Liquidity map — wall size vs price</span>
+        <span class="chart-mid" id="chart-mid">mid —</span>
+      </div>
+      <div id="cw"><canvas id="cc"></canvas><div class="tip" id="tip"></div></div>
+    </div>
+
+    <!-- Bets -->
+    <div class="bets-hdr">
+      <span class="bets-ttl">Trade setups from current price</span>
+      <span style="font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace" id="bet-context">—</span>
+    </div>
+    <div class="bet-grid" id="bet-grid">
+      <div class="bet-empty"><span class="sp"></span>Loading walls…</div>
+    </div>
+
+    <div class="legend">
+      <div class="leg"><div class="leg-dot" style="background:var(--bid)"></div>Bid wall — support</div>
+      <div class="leg"><div class="leg-dot" style="background:var(--ask)"></div>Ask wall — resistance</div>
+      <div class="leg"><div class="leg-dot" style="background:var(--acc)"></div>Current price</div>
+      <div class="leg"><div class="leg-dot" style="background:var(--warn)"></div>Bold target (20+ pips)</div>
+      <div style="font-size:.62rem;color:var(--faint);font-family:'DM Mono',monospace;margin-left:auto">Hover for detail</div>
+    </div>
+  </div>
+
+  <!-- Side panel -->
+  <div class="side">
+    <div class="panel">
+      <div class="panel-ttl">Bid walls — support / buy zones</div>
+      <div id="panel-bids"><span class="sp"></span></div>
+    </div>
+    <div class="panel">
+      <div class="panel-ttl">Ask walls — resistance / sell zones</div>
+      <div id="panel-asks"><span class="sp"></span></div>
+    </div>
+    <div class="panel" style="background:var(--surf2)">
+      <div class="panel-ttl">Trade logic</div>
+      <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;line-height:1.75">
+        Walls ranked by volume first, then proximity.<br><br>
+        <span style="color:var(--bid)">Buy setup</span> — price at or near a bid wall. Buy there, target next ask wall or +20 pips.<br><br>
+        <span style="color:var(--ask)">Sell setup</span> — price at or near an ask wall. Sell there, target next bid wall or -20 pips.<br><br>
+        <span style="color:var(--warn)">Bold buy</span> — large bid wall 20+ pips below. Price likely drawn there in downmove. Buy on touch.<br><br>
+        <span style="color:#a855f7">Bold sell</span> — large ask wall 20+ pips above. Price likely drawn there in upmove. Sell on touch.<br><br>
+        <span style="color:var(--muted)">Trend bias helps decide which setups to favour.</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let midPrice  = null;
+let wallData  = null;
+let trendCtx  = null;
+let prevPx    = {};
+
+function fmt(n,d){ return parseFloat(n).toFixed(d??4); }
+function fmtK(n){ return n>=1000?(n/1000).toFixed(1)+'K':parseFloat(n).toFixed(1); }
+const C={bid:'#22c55e',ask:'#ef4444',warn:'#f59e0b',bold:'#a855f7',acc:'#3de8a0',grid:'#1c2436',txt:'#485878',surf:'#111620'};
+
+// ── Price + trend context ─────────────────────────────────────────
+async function loadPrice() {
+  try {
+    const res  = await fetch('/api/price');
+    const data = await res.json();
+    let midSum=0, cnt=0;
+    const usdc = (data.tickers||[]).find(t=>t.symbol==='EURUSDC');
+    const usdt = (data.tickers||[]).find(t=>t.symbol==='EURUSDT');
+
+    [usdc,usdt].forEach(t => {
+      if (!t||t.error) return;
+      const sfx  = t.symbol.replace('EUR','').toLowerCase();
+      const prev = prevPx[t.symbol];
+      prevPx[t.symbol] = t.price;
+      const up   = prev!==undefined ? t.price>=prev : t.change_pct>=0;
+      const el   = document.getElementById('px-'+sfx);
+      if (el){el.textContent=fmt(t.price,4); el.className='px-val '+(up?'up':'dn');}
+      midSum+=t.price; cnt++;
+    });
+
+    if (usdc && !usdc.error) {
+      document.getElementById('sprd').textContent = fmt(usdc.spread,5);
+      document.getElementById('hi').textContent   = fmt(usdc.high,4);
+      document.getElementById('lo').textContent   = fmt(usdc.low,4);
+      document.getElementById('opn').textContent  = fmt(usdc.open,4);
+      const chgEl = document.getElementById('chg');
+      chgEl.textContent = (usdc.change_pct>=0?'+':'')+usdc.change_pct.toFixed(2)+'%';
+      chgEl.style.color = usdc.change_pct>=0?'var(--bid)':'var(--ask)';
+
+      // Trend bar
+      trendCtx = usdc;
+      const chip  = document.getElementById('trend-chip');
+      const lbl   = document.getElementById('trend-lbl');
+      chip.className = 'trend-chip '+usdc.trend;
+      lbl.textContent = usdc.trend==='bullish'
+        ? `Bullish from open (+${usdc.trend_pips} pips)`
+        : usdc.trend==='bearish'
+        ? `Bearish from open (-${usdc.trend_pips} pips)`
+        : 'Flat from open';
+      document.getElementById('td-pips').innerHTML =
+        `Range today: <b>${usdc.day_range_pips} pips</b>`;
+      document.getElementById('td-high').innerHTML =
+        `From high: <b>${usdc.pips_from_high}p</b>`;
+      document.getElementById('td-low').innerHTML =
+        `From low: <b>${usdc.pips_from_low}p</b>`;
+      document.getElementById('range-cur').style.left = usdc.range_position+'%';
+      document.getElementById('range-pct').textContent = usdc.range_position+'%';
+    }
+
+    if (cnt){ midPrice=midSum/cnt; document.getElementById('chart-mid').textContent='mid '+fmt(midPrice,5); }
+    document.getElementById('px-ts').textContent='updated '+new Date().toUTCString().slice(17,25)+' UTC';
+    const srcBadge = document.getElementById('src-badge');
+    if (srcBadge && data.source) {
+      srcBadge.textContent = 'src: ' + data.source;
+      srcBadge.style.color = data.source === 'binance' ? 'var(--bid)' : data.source === 'kraken' ? 'var(--acc2)' : 'var(--warn)';
+    }
+    setLive(true);
+    if (wallData){ drawChart(); renderBets(); renderPanels(); }
+  } catch(e){ setLive(false); }
+}
+
+// ── Walls ─────────────────────────────────────────────────────────
+async function loadWalls() {
+  try {
+    const res  = await fetch('/api/nearest_walls?top_by_vol=30&n=8&min_gap=0.0003');
+    const data = await res.json();
+    if (data.error) return;
+    wallData = data;
+    if (data.mid) midPrice = data.mid;
+    document.getElementById('chart-mid').textContent='mid '+fmt(data.mid,5);
+    drawChart(); renderPanels(); renderBets();
+  } catch(e){}
+}
+
+// ── Chart ─────────────────────────────────────────────────────────
+function drawChart() {
+  const wrap=document.getElementById('cw'), canvas=document.getElementById('cc');
+  const DPR=window.devicePixelRatio||1, W=wrap.clientWidth, H=wrap.clientHeight;
+  canvas.width=W*DPR; canvas.height=H*DPR;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d'); ctx.scale(DPR,DPR);
+  ctx.clearRect(0,0,W,H);
+  if (!midPrice||!wallData) return;
+
+  const mid=midPrice, all=wallData.all_top||[];
+  if (!all.length) return;
+  const range=0.0120, pMin=mid-range, pMax=mid+range;
+  const PL=68,PR=38,PT=14,PB=22, cW=W-PL-PR, cH=H-PT-PB;
+
+  function yOf(p){ return PT+cH-((p-pMin)/(pMax-pMin))*cH; }
+
+  ctx.fillStyle=C.surf; ctx.fillRect(0,0,W,H);
+
+  // Today high/low bands
+  if (trendCtx) {
+    const yH=yOf(trendCtx.high), yL=yOf(trendCtx.low);
+    ctx.fillStyle='#ffffff04'; ctx.fillRect(PL,yH,cW,yL-yH);
+    ctx.strokeStyle='#ffffff12'; ctx.lineWidth=0.6; ctx.setLineDash([3,4]);
+    if (yH>PT&&yH<H-PB){ ctx.beginPath(); ctx.moveTo(PL,yH); ctx.lineTo(W-PR,yH); ctx.stroke(); }
+    if (yL>PT&&yL<H-PB){ ctx.beginPath(); ctx.moveTo(PL,yL); ctx.lineTo(W-PR,yL); ctx.stroke(); }
+    ctx.setLineDash([]); ctx.globalAlpha=0.5; ctx.fillStyle=C.txt;
+    ctx.font='9px DM Mono,monospace'; ctx.textAlign='left';
+    if (yH>PT+10) ctx.fillText('H',W-PR+3,yH+3);
+    if (yL<H-PB-4) ctx.fillText('L',W-PR+3,yL+3);
+    ctx.globalAlpha=1;
+  }
+
+  // Grid + price labels
+  for (let i=0;i<=8;i++){
+    const p=pMin+(i/8)*(pMax-pMin), y=yOf(p);
+    ctx.strokeStyle=C.grid; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR,y); ctx.stroke();
+    ctx.fillStyle=C.txt; ctx.font='10px DM Mono,monospace'; ctx.textAlign='right';
+    ctx.fillText(fmt(p,4),PL-4,y+3.5);
+  }
+
+  // Pip scale right
+  for (let pip=-120;pip<=120;pip+=20){
+    const y=yOf(mid+pip*0.0001);
+    if (y<PT||y>H-PB) continue;
+    ctx.fillStyle=pip===0?C.acc:C.txt; ctx.font='9px DM Mono,monospace'; ctx.textAlign='left';
+    ctx.fillText((pip>0?'+':'')+pip,W-PR+4,y+3);
+  }
+
+  // Wall bars + level lines
+  const vis=all.filter(lv=>lv.price>=pMin&&lv.price<=pMax);
+  const mxQ=vis.length?Math.max(...vis.map(l=>l.qty)):1;
+  const MAX_BAR=cW*0.50;
+
+  vis.forEach(lv=>{
+    const y=yOf(lv.price), barW=(lv.qty/mxQ)*MAX_BAR;
+    const isW=lv.is_wall, isFar=lv.pips>=20;
+    const col=lv.side==='bid'?C.bid:C.ask;
+    const lineCol=isFar&&isW?C.warn:col;
+
+    ctx.globalAlpha=isW?0.55:0.2; ctx.fillStyle=lineCol;
+    ctx.fillRect(W-PR-barW,y-3.5,barW,7); ctx.globalAlpha=1;
+
+    ctx.strokeStyle=lineCol; ctx.lineWidth=isW?0.9:0.35;
+    ctx.globalAlpha=isW?0.5:0.15; ctx.setLineDash(isW?[5,3]:[2,5]);
+    ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR-barW,y); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+
+    if (isW){
+      ctx.fillStyle=lineCol; ctx.font='9px DM Mono,monospace'; ctx.textAlign='left'; ctx.globalAlpha=0.85;
+      ctx.fillText(fmtK(lv.qty)+(lv.side==='bid'?' B':' A'),PL+3,y-5);
+      ctx.globalAlpha=1;
+    }
+  });
+
+  // Open price line
+  if (trendCtx){
+    const yO=yOf(trendCtx.open);
+    if (yO>PT&&yO<H-PB){
+      ctx.strokeStyle='#ffffff30'; ctx.lineWidth=0.8; ctx.setLineDash([3,5]);
+      ctx.beginPath(); ctx.moveTo(PL,yO); ctx.lineTo(W-PR,yO); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle='#ffffff40'; ctx.font='9px DM Mono,monospace';
+      ctx.textAlign='left'; ctx.fillText('OPEN',PL+3,yO-4);
+    }
+  }
+
+  // Distance arrows to nearest walls
+  const nBid=(wallData.bid_walls||[]).filter(lv=>lv.price>=pMin)[0];
+  const nAsk=(wallData.ask_walls||[]).filter(lv=>lv.price<=pMax)[0];
+  const ax=PL+cW*0.32;
+  function arrow(y1,y2,col,lbl){
+    if (Math.abs(y2-y1)<6) return;
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=1; ctx.globalAlpha=0.7;
+    ctx.beginPath(); ctx.moveTo(ax,y1); ctx.lineTo(ax,y2); ctx.stroke();
+    const dir=y2>y1?1:-1;
+    ctx.beginPath(); ctx.moveTo(ax,y2); ctx.lineTo(ax-4,y2-dir*8); ctx.lineTo(ax+4,y2-dir*8); ctx.closePath(); ctx.fill();
+    ctx.font='9px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText(lbl,ax,(y1+y2)/2+(dir>0?-4:12));
+    ctx.globalAlpha=1;
+  }
+  const yM=yOf(mid);
+  if (nBid) arrow(yM,yOf(nBid.price),C.bid,Math.round(nBid.pips)+'p');
+  if (nAsk) arrow(yM,yOf(nAsk.price),C.ask,Math.round(nAsk.pips)+'p');
+
+  // Mid price box
+  ctx.fillStyle='#000'; ctx.fillRect(PL,yM-9,64,18);
+  ctx.strokeStyle=C.acc; ctx.lineWidth=0.8; ctx.strokeRect(PL,yM-9,64,18);
+  ctx.strokeStyle=C.acc; ctx.lineWidth=2; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(PL,yM); ctx.lineTo(W-PR,yM); ctx.stroke();
+  ctx.fillStyle=C.acc; ctx.font='10px DM Mono,monospace'; ctx.textAlign='center';
+  ctx.fillText(fmt(mid,4),PL+32,yM+3.5);
+
+  // Tooltip
+  canvas.onmousemove=(e)=>{
+    const rect=canvas.getBoundingClientRect(), mx=e.clientX-rect.left, my=e.clientY-rect.top;
+    const tip=document.getElementById('tip');
+    let closest=null, cd=Infinity;
+    vis.forEach(lv=>{ const d=Math.abs(yOf(lv.price)-my); if(d<cd&&d<10){cd=d;closest=lv;} });
+    if (closest){
+      tip.style.display='block'; tip.style.left=(mx+14)+'px'; tip.style.top=(my-12)+'px';
+      const col=closest.side==='bid'?C.bid:C.ask;
+      tip.innerHTML=`<b style="color:${col}">${fmt(closest.price,4)}</b> ${closest.side.toUpperCase()} · <b>${fmtK(closest.qty)} EUR</b> · ${Math.round(closest.pips)}p · ${closest.symbol}`;
+    } else { tip.style.display='none'; }
+  };
+  canvas.onmouseleave=()=>{ document.getElementById('tip').style.display='none'; };
+}
+
+// ── Side panels ───────────────────────────────────────────────────
+function renderPanels() {
+  if (!wallData) return;
+  const maxQ=wallData.all_top.length?wallData.all_top[0].qty:1;
+  function rows(walls, side) {
+    if (!walls.length) return '<div style="color:var(--muted);font-size:.72rem;font-family:\'DM Mono\',monospace">No walls found</div>';
+    return walls.map(lv=>{
+      const pct=(lv.qty/maxQ*100).toFixed(1), pip=Math.round(lv.pips);
+      const pc=pip<10?'near':pip<30?'mid_':'far';
+      return `<div class="wall-row">
+        <span class="wr-price ${side}">${fmt(lv.price,4)}${lv.is_wall?`<span class="wtag ${side}">W</span>`:''}</span>
+        <div class="wr-bar"><div class="wr-fill ${side} ${lv.is_wall?'wall':''}" style="width:${pct}%"></div></div>
+        <span class="wr-qty">${fmtK(lv.qty)}</span>
+        <span class="wr-pip ${pc}">${pip}p</span>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('panel-bids').innerHTML=rows(wallData.bid_walls||[],'bid');
+  document.getElementById('panel-asks').innerHTML=rows(wallData.ask_walls||[],'ask');
+}
+
+// ── Bet cards — proper trader logic ──────────────────────────────
+function renderBets() {
+  if (!wallData||!midPrice) return;
+  const mid   = midPrice;
+  const bids  = wallData.bid_walls||[];
+  const asks  = wallData.ask_walls||[];
+  const maxQ  = wallData.all_top.length?wallData.all_top[0].qty:1;
+  const trend = trendCtx ? trendCtx.trend : 'flat';
+  const rangePos = trendCtx ? trendCtx.range_position : 50;
+
+  // AT_ZONE threshold — within 5 pips = we're at this wall
+  const AT_ZONE = 5;
+
+  const nearBid = bids[0]; // nearest bid wall below
+  const nearAsk = asks[0]; // nearest ask wall above
+
+  // Bold targets — big walls 20+ pips away
+  const boldBid = bids.find(lv => lv.pips >= 20 && lv.is_wall);
+  const boldAsk = asks.find(lv => lv.pips >= 20 && lv.is_wall);
+
+  function pip2usd(pips, lot) { return (pips * 0.10 * (lot/0.01)).toFixed(2); }
+
+  const cards = [];
+
+  // ── Setup 1: BUY from nearest bid wall ───────────────────────
+  // If price is AT or NEAR a bid wall → buy there, target next ask wall or +20p
+  if (nearBid) {
+    const atZone = nearBid.pips <= AT_ZONE;
+    const targetAsk = asks[0]; // nearest ask = take profit
+    const tpPrice = targetAsk ? targetAsk.price : mid + 0.0020;
+    const tpPips  = Math.round((tpPrice - (atZone ? mid : nearBid.price)) / 0.0001);
+    const entryPrice = atZone ? mid : nearBid.price;
+    const wallPct = Math.round(nearBid.qty/maxQ*100);
+    const setup = atZone
+      ? `Price at bid wall — buy now`
+      : `Wait for price to reach ${fmt(nearBid.price,4)} then buy`;
+    const note = trend==='bearish'
+      ? `Trend is bearish — wait for wall touch confirmation before entry`
+      : `Trend is bullish — favourable for this buy setup`;
+    cards.push({ cls:'buy', tier:'Buy', pill:'LONG',
+      setup, entry: fmt(entryPrice,4), target: fmt(tpPrice,4),
+      pips: Math.abs(tpPips), wallPct,
+      wallQty: fmtK(nearBid.qty), note, sym: nearBid.symbol });
+  }
+
+  // ── Setup 2: SELL from nearest ask wall ──────────────────────
+  // If price is AT or NEAR an ask wall → sell there, target next bid wall or -20p
+  if (nearAsk) {
+    const atZone = nearAsk.pips <= AT_ZONE;
+    const targetBid = bids[0];
+    const tpPrice = targetBid ? targetBid.price : mid - 0.0020;
+    const tpPips  = Math.round(((atZone ? mid : nearAsk.price) - tpPrice) / 0.0001);
+    const entryPrice = atZone ? mid : nearAsk.price;
+    const wallPct = Math.round(nearAsk.qty/maxQ*100);
+    const setup = atZone
+      ? `Price at ask wall — sell now`
+      : `Wait for price to reach ${fmt(nearAsk.price,4)} then sell`;
+    const note = trend==='bullish'
+      ? `Trend is bullish — wait for wall touch confirmation before entry`
+      : `Trend is bearish — favourable for this sell setup`;
+    cards.push({ cls:'sell', tier:'Sell', pill:'SHORT',
+      setup, entry: fmt(entryPrice,4), target: fmt(tpPrice,4),
+      pips: Math.abs(tpPips), wallPct,
+      wallQty: fmtK(nearAsk.qty), note, sym: nearAsk.symbol });
+  }
+
+  // ── Setup 3: BOLD BUY — price heading to a big bid wall ──────
+  // Large bid wall well below — price may get drawn there in downmove
+  // Entry: at the bold bid wall. Target: back to mid or nearest ask above bid
+  if (boldBid) {
+    const targetAsk = asks[0];
+    const entryPrice = boldBid.price;
+    const tpPrice = targetAsk ? Math.min(targetAsk.price, mid) : mid;
+    const tpPips  = Math.round((tpPrice - entryPrice) / 0.0001);
+    const wallPct = Math.round(boldBid.qty/maxQ*100);
+    const note = `Large wall ${Math.round(boldBid.pips)}p below (${wallPct}% of max volume). `+
+      (trend==='bearish' ? 'Bearish trend increases probability price reaches this zone.' : 'Set alert at entry price.');
+    cards.push({ cls:'bold-buy', tier:'Bold buy', pill:'BOLD LONG',
+      setup:`Set buy order at ${fmt(entryPrice,4)} (bold bid wall)`,
+      entry: fmt(entryPrice,4), target: fmt(tpPrice,4),
+      pips: Math.abs(tpPips), wallPct,
+      wallQty: fmtK(boldBid.qty), note, sym: boldBid.symbol });
+  }
+
+  // ── Setup 4: BOLD SELL — price heading to a big ask wall ─────
+  if (boldAsk) {
+    const targetBid = bids[0];
+    const entryPrice = boldAsk.price;
+    const tpPrice = targetBid ? Math.max(targetBid.price, mid) : mid;
+    const tpPips  = Math.round((entryPrice - tpPrice) / 0.0001);
+    const wallPct = Math.round(boldAsk.qty/maxQ*100);
+    const note = `Large wall ${Math.round(boldAsk.pips)}p above (${wallPct}% of max volume). `+
+      (trend==='bullish' ? 'Bullish trend increases probability price reaches this zone.' : 'Set alert at entry price.');
+    cards.push({ cls:'bold-sell', tier:'Bold sell', pill:'BOLD SHORT',
+      setup:`Set sell order at ${fmt(entryPrice,4)} (bold ask wall)`,
+      entry: fmt(entryPrice,4), target: fmt(tpPrice,4),
+      pips: Math.abs(tpPips), wallPct,
+      wallQty: fmtK(boldAsk.qty), note, sym: boldAsk.symbol });
+  }
+
+  // Trend context label
+  const trendMsg = trend==='bullish'
+    ? `Bullish from open · price at ${Math.round(rangePos)}% of day range — favouring buy setups`
+    : trend==='bearish'
+    ? `Bearish from open · price at ${Math.round(rangePos)}% of day range — favouring sell setups`
+    : `Flat from open · no directional bias`;
+  document.getElementById('bet-context').textContent = trendMsg;
+
+  if (!cards.length) {
+    document.getElementById('bet-grid').innerHTML='<div class="bet-empty">No trade setups — no walls found near price.</div>';
+    return;
+  }
+
+  document.getElementById('bet-grid').innerHTML = cards.map(c=>`
+    <div class="bet-card ${c.cls}">
+      <div class="bet-action">${c.tier} <span class="bet-pill">${c.pill}</span></div>
+      <div class="bet-setup">${c.setup}</div>
+      <div class="bet-range">${c.entry} → ${c.target}</div>
+      <div class="bet-pips"><b>${c.pips} pips</b> to target · wall: ${c.wallQty} EUR (${c.wallPct}% vol)</div>
+      <div class="bet-pl">
+        0.01 lot → <b>$${pip2usd(c.pips,0.01)}</b> &nbsp;
+        0.05 lot → <b>$${pip2usd(c.pips,0.05)}</b> &nbsp;
+        0.10 lot → <b>$${pip2usd(c.pips,0.10)}</b>
+      </div>
+      <div class="bet-note">${c.note} · ${c.sym}</div>
+    </div>`).join('');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────
+async function init(){ await loadPrice(); await loadWalls(); }
+init();
+setInterval(loadPrice, 5*60*1000);
+setInterval(loadWalls, 15*60*1000);
+window.addEventListener('resize', ()=>{ if(wallData) drawChart(); });
+</script>
+{% endblock %}

@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+{% block title %}Technical Levels — LiquidScan{% endblock %}
+{% block head %}
+<style>
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.8rem}
+.page-title{font-size:1.1rem;font-weight:700;color:#fff}
+.page-sub{font-size:.75rem;color:var(--muted);margin-top:.2rem;font-family:'DM Mono',monospace}
+
+/* TF tabs */
+.tf-tabs{display:flex;gap:5px;margin-bottom:1rem;flex-wrap:wrap}
+.tf-tab{padding:.32rem .85rem;border-radius:var(--r);font-family:'DM Mono',monospace;font-size:.75rem;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--muted);transition:all .15s}
+.tf-tab:hover{color:var(--text);background:var(--surf2)}
+.tf-tab.active{color:var(--acc);border-color:var(--acc);background:#3de8a012}
+
+/* Price strip */
+.px-strip{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.6rem 1rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:1rem;font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)}
+.px-strip b{color:var(--text)}
+.px-strip .cur{font-size:1.1rem;font-weight:500;color:#fff}
+.px-strip .cur.up{color:var(--bid)} .px-strip .cur.dn{color:var(--ask)}
+
+/* Main grid */
+.levels-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1rem}
+@media(max-width:860px){.levels-grid{grid-template-columns:1fr}}
+
+/* Chart */
+.chart-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:1rem;grid-column:1/-1}
+.chart-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;flex-wrap:wrap;gap:.4rem}
+.chart-ttl{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace}
+#cw{position:relative;width:100%;height:340px}
+#cc{width:100%;height:100%}
+.ctip{position:absolute;background:var(--surf2);border:1px solid var(--border2);border-radius:var(--r);padding:5px 9px;font-family:'DM Mono',monospace;font-size:.72rem;color:var(--text);pointer-events:none;white-space:nowrap;display:none;z-index:10}
+
+/* Level cards */
+.lvl-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:.9rem 1rem}
+.lvl-title{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.7rem;display:flex;align-items:center;justify-content:space-between}
+.lvl-subtitle{font-size:.65rem;color:var(--faint);font-family:'DM Mono',monospace;font-weight:400}
+
+.level-row{display:grid;grid-template-columns:80px 1fr 60px 56px;align-items:center;gap:6px;padding:.28rem .3rem;border-radius:var(--r);margin-bottom:2px}
+.level-row:hover{background:var(--surf2)}
+.lr-name{font-size:.7rem;font-family:'DM Mono',monospace;color:var(--muted)}
+.lr-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.lr-fill{height:100%;border-radius:2px}
+.lr-price{font-size:.8rem;font-weight:500;font-family:'DM Mono',monospace;text-align:right}
+.lr-dist{font-size:.68rem;font-family:'DM Mono',monospace;text-align:right}
+
+/* Colour coding */
+.r1,.r2,.r3,.r4{} 
+.c-res .lr-price{color:var(--ask)}
+.c-sup .lr-price{color:var(--bid)}
+.c-pp  .lr-price{color:var(--acc)}
+.c-vwap .lr-price{color:#a78bfa}
+.c-fib  .lr-price{color:var(--warn)}
+.c-murray .lr-price{color:var(--acc2)}
+
+.near-tag{font-size:.58rem;padding:1px 4px;border-radius:3px;font-weight:600;margin-left:3px;vertical-align:middle}
+.near-res{background:var(--ask-dim);color:var(--ask);border:1px solid #ef444430}
+.near-sup{background:var(--bid-dim);color:var(--bid);border:1px solid #22c55e30}
+
+/* Bet generator */
+.bet-gen{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:1rem;grid-column:1/-1}
+.bet-gen-ttl{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.8rem}
+.bets-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.bet-card{border-radius:var(--r2);padding:.8rem .9rem;border:1px solid}
+.bet-card.buy{border-color:var(--bid);background:var(--bid-dim)}
+.bet-card.sell{border-color:var(--ask);background:var(--ask-dim)}
+.bet-card.bold-buy{border-color:var(--warn);background:#161000}
+.bet-card.bold-sell{border-color:#a855f7;background:#0e0016}
+.bt{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;font-family:'DM Mono',monospace;margin-bottom:.2rem}
+.buy .bt{color:var(--bid)} .sell .bt{color:var(--ask)}
+.bold-buy .bt{color:var(--warn)} .bold-sell .bt{color:#a855f7}
+.br{font-size:.88rem;font-weight:600;font-family:'DM Mono',monospace;color:#fff;margin:.2rem 0}
+.bp{font-size:.7rem;font-family:'DM Mono',monospace;color:var(--muted);margin-bottom:.3rem}
+.bp b{color:var(--text)}
+.bpl{font-size:.68rem;font-family:'DM Mono',monospace;color:var(--muted);line-height:1.6}
+.bpl b{color:#fff}
+.bn{font-size:.62rem;color:var(--muted);font-family:'DM Mono',monospace;border-top:0.5px solid var(--border);padding-top:.3rem;margin-top:.3rem;opacity:.8;line-height:1.4}
+
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--muted);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{padding:1.5rem;text-align:center;color:var(--muted);font-size:.78rem;font-family:'DM Mono',monospace}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-hdr">
+  <div>
+    <div class="page-title">Technical levels</div>
+    <div class="page-sub">Pivots · Fibonacci · Murray Math · VWAP — calculated from Kraken OHLC</div>
+  </div>
+  <button class="btn btn-green" onclick="load()">↻ Refresh</button>
+</div>
+
+<div class="tf-tabs">
+  <button class="tf-tab" onclick="setTF('15m',this)">15m</button>
+  <button class="tf-tab" onclick="setTF('30m',this)">30m</button>
+  <button class="tf-tab" onclick="setTF('h1',this)">H1</button>
+  <button class="tf-tab" onclick="setTF('h4',this)">H4</button>
+  <button class="tf-tab active" onclick="setTF('d1',this)">Daily</button>
+</div>
+
+<div class="px-strip">
+  <span>EUR/USD</span>
+  <span class="cur" id="cur-px">—</span>
+  <span>TF: <b id="tf-lbl">Daily</b></span>
+  <span>Prev candle H:<b id="pc-h">—</b> L:<b id="pc-l">—</b> C:<b id="pc-c">—</b></span>
+  <span style="margin-left:auto">Source: <b id="src-lbl">—</b> · <b id="ts-lbl">—</b></span>
+</div>
+
+<div class="levels-grid" id="levels-grid">
+  <div class="empty" style="grid-column:1/-1"><span class="sp"></span>Loading levels…</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let tf      = 'd1';
+let data    = null;
+let prevPx  = null;
+
+function setTF(v, btn) {
+  tf = v;
+  document.querySelectorAll('.tf-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  load();
+}
+
+function fmt(n,d){ return n!=null ? parseFloat(n).toFixed(d??5) : '—'; }
+function fmtK(n){ return n>=1000?(n/1000).toFixed(1)+'K':parseFloat(n).toFixed(2); }
+
+async function load() {
+  document.getElementById('levels-grid').innerHTML =
+    '<div class="empty" style="grid-column:1/-1"><span class="sp"></span>Loading…</div>';
+  try {
+    const res = await fetch(`/api/levels?tf=${tf}`);
+    const d   = await res.json();
+    if (d.error) throw new Error(d.error);
+    data = d;
+    render(d);
+    setLive(true);
+  } catch(e) {
+    document.getElementById('levels-grid').innerHTML =
+      `<div class="empty" style="grid-column:1/-1">Error: ${e.message}</div>`;
+    setLive(false);
+  }
+}
+
+function render(d) {
+  const price = d.price;
+  const prev  = prevPx;
+  prevPx = price;
+  const up  = prev !== null ? price >= prev : d.classic.pp ? price >= d.classic.pp : true;
+  const el  = document.getElementById('cur-px');
+  el.textContent = fmt(price,5);
+  el.className   = 'cur ' + (up ? 'up' : 'dn');
+  document.getElementById('tf-lbl').textContent  = d.tf_label;
+  document.getElementById('pc-h').textContent    = fmt(d.prev_candle.h,5);
+  document.getElementById('pc-l').textContent    = fmt(d.prev_candle.l,5);
+  document.getElementById('pc-c').textContent    = fmt(d.prev_candle.c,5);
+  document.getElementById('src-lbl').textContent = d.source || '—';
+  document.getElementById('ts-lbl').textContent  = (d.ts||'').slice(11,19) + ' UTC';
+
+  // Collect ALL levels for chart and distance calc
+  const allLevels = collectAllLevels(d, price);
+
+  document.getElementById('levels-grid').innerHTML = `
+    ${chartCard(d, allLevels, price)}
+    ${pivotCard('Classic pivots', d.classic, price, 'classic')}
+    ${pivotCard('Camarilla pivots', d.camarilla, price, 'cam')}
+    ${pivotCard('Woodie pivots', d.woodie, price, 'woodie')}
+    ${fibCard(d.fibonacci, price)}
+    ${murrayCard(d.murray, price)}
+    ${vwapCard(d.vwap, price)}
+    ${betGenCard(allLevels, price, d)}
+  `;
+
+  // Draw chart after DOM is ready
+  setTimeout(() => drawChart(d, allLevels, price), 50);
+}
+
+function collectAllLevels(d, price) {
+  const levels = [];
+  const addLvl = (name, val, type, src) => {
+    if (val == null || isNaN(val)) return;
+    levels.push({ name, price: val, type, source: src,
+                  dist: val - price, pips: Math.round((val-price)/0.0001) });
+  };
+
+  // Classic pivots
+  if (d.classic) {
+    addLvl('PP', d.classic.pp, 'pp', 'classic');
+    addLvl('R1', d.classic.r1, 'res', 'classic'); addLvl('S1', d.classic.s1, 'sup', 'classic');
+    addLvl('R2', d.classic.r2, 'res', 'classic'); addLvl('S2', d.classic.s2, 'sup', 'classic');
+    addLvl('R3', d.classic.r3, 'res', 'classic'); addLvl('S3', d.classic.s3, 'sup', 'classic');
+  }
+  // Camarilla
+  if (d.camarilla) {
+    addLvl('CR4', d.camarilla.r4, 'res', 'cam'); addLvl('CS4', d.camarilla.s4, 'sup', 'cam');
+    addLvl('CR3', d.camarilla.r3, 'res', 'cam'); addLvl('CS3', d.camarilla.s3, 'sup', 'cam');
+  }
+  // Fibonacci
+  if (d.fibonacci && d.fibonacci.retracements) {
+    Object.entries(d.fibonacci.retracements).forEach(([k,v]) =>
+      addLvl(`F${k}`, v, v > price ? 'res' : 'sup', 'fib'));
+  }
+  // VWAP
+  if (d.vwap) {
+    addLvl('VWAP', d.vwap.vwap, 'vwap', 'vwap');
+    addLvl('V+1σ', d.vwap.upper_1, 'res', 'vwap');
+    addLvl('V+2σ', d.vwap.upper_2, 'res', 'vwap');
+    addLvl('V-1σ', d.vwap.lower_1, 'sup', 'vwap');
+    addLvl('V-2σ', d.vwap.lower_2, 'sup', 'vwap');
+  }
+  return levels.sort((a,b) => b.price - a.price);
+}
+
+function distTag(pips, type) {
+  if (Math.abs(pips) > 100) return '';
+  const cls = type==='res' ? 'near-res' : 'near-sup';
+  if (Math.abs(pips) <= 5)  return `<span class="near-tag ${cls}">AT</span>`;
+  if (Math.abs(pips) <= 15) return `<span class="near-tag ${cls}">NEAR</span>`;
+  return '';
+}
+
+function levelRow(name, val, price, typeClass) {
+  if (val == null) return '';
+  const pips = Math.round((val - price) / 0.0001);
+  const dir  = val > price ? 'res' : val < price ? 'sup' : 'pp';
+  const distColor = val > price ? 'var(--ask)' : val < price ? 'var(--bid)' : 'var(--acc)';
+  const pct  = Math.min(100, Math.abs(pips) / 2);
+  return `<div class="level-row ${typeClass}">
+    <span class="lr-name">${name}${distTag(pips,dir)}</span>
+    <div class="lr-bar"><div class="lr-fill" style="width:${pct}%;background:${distColor};opacity:.6"></div></div>
+    <span class="lr-price">${fmt(val,4)}</span>
+    <span class="lr-dist" style="color:${distColor}">${pips>0?'+':''}${pips}p</span>
+  </div>`;
+}
+
+function pivotCard(title, data_, price, typeKey) {
+  if (!data_) return '';
+  const cls = (t) => t==='pp' ? 'c-pp' : t.startsWith('r') ? 'c-res' : 'c-sup';
+  let rows = '';
+  const order = data_.pp != null
+    ? ['r3','r2','r1','pp','s1','s2','s3']
+    : ['r4','r3','r2','r1','s1','s2','s3','s4'];
+  order.forEach(k => { if (data_[k] != null) rows += levelRow(k.toUpperCase(), data_[k], price, cls(k)); });
+  return `<div class="lvl-card">
+    <div class="lvl-title">${title}<span class="lvl-subtitle">prev candle H/L/C</span></div>
+    ${rows}
+  </div>`;
+}
+
+function fibCard(fib, price) {
+  if (!fib) return '';
+  let rows = '';
+  const all = {...fib.retracements};
+  Object.entries(all).sort((a,b) => b[1]-a[1]).forEach(([k,v]) =>
+    rows += levelRow('F ' + k, v, price, 'c-fib'));
+  return `<div class="lvl-card">
+    <div class="lvl-title">Fibonacci retracements<span class="lvl-subtitle">last ${50} candles swing</span></div>
+    ${rows}
+  </div>`;
+}
+
+function murrayCard(murray, price) {
+  if (!murray) return '';
+  let rows = '';
+  Object.entries(murray.levels).sort((a,b) => b[1]-a[1]).forEach(([k,v]) =>
+    rows += levelRow(k.split('—')[0].trim(), v, price, 'c-murray'));
+  return `<div class="lvl-card">
+    <div class="lvl-title">Murray math<span class="lvl-subtitle">grid: ${murray.grid}</span></div>
+    ${rows}
+  </div>`;
+}
+
+function vwapCard(vwap, price) {
+  if (!vwap) return '<div class="lvl-card"><div class="lvl-title">VWAP</div><div class="empty">No VWAP data</div></div>';
+  return `<div class="lvl-card">
+    <div class="lvl-title">VWAP + bands<span class="lvl-subtitle">volume-weighted avg price</span></div>
+    ${levelRow('V+2σ', vwap.upper_2, price, 'c-vwap')}
+    ${levelRow('V+1σ', vwap.upper_1, price, 'c-vwap')}
+    ${levelRow('VWAP', vwap.vwap,    price, 'c-vwap')}
+    ${levelRow('V-1σ', vwap.lower_1, price, 'c-vwap')}
+    ${levelRow('V-2σ', vwap.lower_2, price, 'c-vwap')}
+  </div>`;
+}
+
+function chartCard(d, allLevels, price) {
+  return `<div class="chart-card">
+    <div class="chart-hdr">
+      <span class="chart-ttl">All levels — price map</span>
+      <span style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace" id="chart-info">hover a level</span>
+    </div>
+    <div id="cw"><canvas id="cc"></canvas><div class="ctip" id="ctip"></div></div>
+  </div>`;
+}
+
+function drawChart(d, allLevels, price) {
+  const canvas = document.getElementById('cc');
+  if (!canvas) return;
+  const wrap = document.getElementById('cw');
+  const DPR  = window.devicePixelRatio || 1;
+  const W    = wrap.clientWidth, H = 340;
+  canvas.width  = W*DPR; canvas.height = H*DPR;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+  ctx.clearRect(0,0,W,H);
+
+  // Price range — use all levels ±buffer
+  const prices = allLevels.map(l=>l.price).filter(p=>Math.abs(p-price)/0.0001 < 150);
+  if (!prices.length) return;
+  const pMin = Math.min(...prices, price) - 0.0010;
+  const pMax = Math.max(...prices, price) + 0.0010;
+  const PL=72, PR=72, PT=16, PB=16;
+  const cW=W-PL-PR, cH=H-PT-PB;
+
+  function yOf(p){ return PT + cH - ((p-pMin)/(pMax-pMin))*cH; }
+
+  // Background
+  ctx.fillStyle='#0c1018'; ctx.fillRect(0,0,W,H);
+
+  // Grid
+  for (let i=0;i<=6;i++){
+    const p = pMin+(i/6)*(pMax-pMin), y=yOf(p);
+    ctx.strokeStyle='#1c2436'; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR,y); ctx.stroke();
+    ctx.fillStyle='#485878'; ctx.font='10px DM Mono,monospace'; ctx.textAlign='right';
+    ctx.fillText(fmt(p,4), PL-4, y+3.5);
+  }
+
+  const srcColors = {
+    classic: '#ef4444', cam: '#f59e0b', woodie:'#fb923c',
+    fib: '#eab308', vwap:'#a78bfa', murray:'#2bc4e8'
+  };
+  const lineStyles = { res:'dashed', sup:'dashed', pp:'solid', vwap:'solid' };
+
+  // Draw each level
+  allLevels.forEach(lv => {
+    if (Math.abs(lv.pips) > 130) return;
+    const y   = yOf(lv.price);
+    const col = srcColors[lv.source] || '#485878';
+    const isNear = Math.abs(lv.pips) <= 15;
+
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = isNear ? 1.2 : 0.5;
+    ctx.globalAlpha = isNear ? 0.8 : 0.35;
+    ctx.setLineDash(lv.type==='pp'||lv.source==='vwap' ? [] : [4,3]);
+    ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR,y); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+
+    // Label right side
+    ctx.fillStyle = isNear ? col : '#485878';
+    ctx.font = '9px DM Mono,monospace'; ctx.textAlign='left'; ctx.globalAlpha=isNear?1:0.6;
+    ctx.fillText(lv.name + ' ' + fmt(lv.price,4), W-PR+3, y+3);
+    ctx.globalAlpha=1;
+  });
+
+  // Current price line
+  const yP = yOf(price);
+  ctx.strokeStyle='#3de8a0'; ctx.lineWidth=2; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(PL,yP); ctx.lineTo(W-PR,yP); ctx.stroke();
+  ctx.fillStyle='#000'; ctx.fillRect(PL,yP-9,68,18);
+  ctx.strokeStyle='#3de8a0'; ctx.lineWidth=0.8; ctx.strokeRect(PL,yP-9,68,18);
+  ctx.fillStyle='#3de8a0'; ctx.font='10px DM Mono,monospace';
+  ctx.textAlign='center'; ctx.fillText(fmt(price,4), PL+34, yP+3.5);
+
+  // Legend
+  const legend = [['classic','Classic'],['cam','Camarilla'],['fib','Fibonacci'],['vwap','VWAP'],['murray','Murray']];
+  legend.forEach(([k,lbl],i) => {
+    const x = PL + i*(cW/legend.length);
+    ctx.fillStyle = srcColors[k]; ctx.fillRect(x, H-10, 20, 3); ctx.globalAlpha=1;
+    ctx.fillStyle='#485878'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='left';
+    ctx.fillText(lbl, x+23, H-7);
+  });
+
+  // Tooltip
+  canvas.onmousemove = (e) => {
+    const rect=canvas.getBoundingClientRect(), my=e.clientY-rect.top, mx=e.clientX-rect.left;
+    const tip=document.getElementById('ctip');
+    let closest=null, cd=Infinity;
+    allLevels.forEach(lv => {
+      if (Math.abs(lv.pips)>130) return;
+      const d=Math.abs(yOf(lv.price)-my);
+      if (d<cd&&d<10){cd=d;closest=lv;}
+    });
+    if (closest){
+      tip.style.display='block'; tip.style.left=(mx+14)+'px'; tip.style.top=(my-12)+'px';
+      const col=srcColors[closest.source]||'#888';
+      tip.innerHTML=`<b style="color:${col}">${closest.name}</b> ${fmt(closest.price,5)} · <b>${closest.pips>0?'+':''}${closest.pips} pips</b> · ${closest.source}`;
+      document.getElementById('chart-info').textContent=`${closest.name} — ${closest.source}`;
+    } else { tip.style.display='none'; }
+  };
+  canvas.onmouseleave=()=>{ document.getElementById('ctip').style.display='none'; };
+}
+
+function betGenCard(allLevels, price, d) {
+  // Find nearest resistance and support from ALL level types
+  const res = allLevels.filter(l => l.price > price && l.pips > 3)
+                        .sort((a,b) => a.price - b.price);
+  const sup = allLevels.filter(l => l.price < price && l.pips < -3)
+                        .sort((a,b) => b.price - a.price);
+
+  const nearRes = res[0];
+  const nearSup = sup[0];
+  const boldRes = res.find(l => l.pips >= 20 && ['classic','cam','fib'].includes(l.source));
+  const boldSup = sup.find(l => Math.abs(l.pips) >= 20 && ['classic','cam','fib'].includes(l.source));
+
+  function pip2usd(pips, lot){ return (Math.abs(pips)*0.10*(lot/0.01)).toFixed(2); }
+
+  function card(entry, target, pips, cls, tier, reason) {
+    if (!target) return '';
+    return `<div class="bet-card ${cls}">
+      <div class="bt">${tier}</div>
+      <div class="br">${fmt(entry,4)} → ${fmt(target.price,4)}</div>
+      <div class="bp"><b>${Math.abs(pips)} pips</b> · ${target.name} (${target.source})</div>
+      <div class="bpl">
+        0.01 → <b>$${pip2usd(pips,.01)}</b> &nbsp;
+        0.05 → <b>$${pip2usd(pips,.05)}</b> &nbsp;
+        0.10 → <b>$${pip2usd(pips,.10)}</b>
+      </div>
+      <div class="bn">${reason}</div>
+    </div>`;
+  }
+
+  const trend = d && d.classic ?
+    (price > d.classic.pp ? 'bullish' : 'bearish') : 'neutral';
+  const trendTxt = `Price is ${price > (d.classic?.pp||price) ? 'above' : 'below'} pivot — ${trend} bias`;
+
+  const cards = [
+    card(price, nearSup, nearSup?.pips||0, 'buy',
+         'Buy from support',
+         `${nearSup?.name||''} level below — buy on touch, target ${nearRes?.name||'next resistance'}. ${trendTxt}`),
+    card(price, nearRes, nearRes?.pips||0, 'sell',
+         'Sell from resistance',
+         `${nearRes?.name||''} level above — sell on touch, target ${nearSup?.name||'next support'}. ${trendTxt}`),
+    card(price, boldSup, boldSup?.pips||0, 'bold-buy',
+         'Bold buy — key level',
+         `${boldSup?.name||''} (${boldSup?.source||''}) is a significant level 20+ pips below. High-probability bounce zone.`),
+    card(price, boldRes, boldRes?.pips||0, 'bold-sell',
+         'Bold sell — key level',
+         `${boldRes?.name||''} (${boldRes?.source||''}) is a significant level 20+ pips above. High-probability rejection zone.`),
+  ].filter(Boolean).join('');
+
+  return `<div class="bet-gen">
+    <div class="bet-gen-ttl">Bet generator — from technical levels</div>
+    <div class="bets-row">${cards || '<div class="empty">No levels close enough to generate bets</div>'}</div>
+  </div>`;
+}
+
+load();
+window.addEventListener('resize', () => { if (data) drawChart(data, collectAllLevels(data, data.price), data.price); });
+</script>
+{% endblock %}
