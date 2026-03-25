@@ -16,7 +16,7 @@ BINANCE_SYMS   = ["EURUSDC", "EURUSDT"]  # Binance symbols (used if Binance reac
 # Kraken: real EUR/USD spot, 500 levels, no geo-block
 KRAKEN_TICKER  = "https://api.kraken.com/0/public/Ticker"
 KRAKEN_DEPTH   = "https://api.kraken.com/0/public/Depth"
-KRAKEN_OHLC = "https://api.kraken.com/0/public/OHLC"
+KRAKEN_OHLC    = "https://api.kraken.com/0/public/OHLC"
 KRAKEN_PAIR    = "EURUSD"
 
 # Coinbase: shallower (50 levels) but reliable fallback
@@ -26,8 +26,69 @@ COINBASE_DEPTH  = "https://api.coinbase.com/api/v3/brokerage/market/product_book
 # CoinGecko: price only — last resort if all else fails
 COINGECKO_URL  = "https://api.coingecko.com/api/v3/simple/price"
 
-NEWS_API_KEY   = os.environ.get("NEWS_API_KEY", "")
+NEWS_API_KEY   = os.environ.get("NEWS_API_KEY", "e0f81e80d1fe46498a62a9148e342058")
 NEWS_URL       = "https://newsapi.org/v2/everything"
+
+# RSS and economic calendar sources (no API key needed)
+FF_CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+RSS_SOURCES = [
+    {"name": "FXStreet",    "url": "https://www.fxstreet.com/rss/news",                      "weight": 3},
+    {"name": "Reuters",     "url": "https://feeds.reuters.com/reuters/businessNews",           "weight": 2},
+    {"name": "MarketWatch", "url": "https://feeds.marketwatch.com/marketwatch/marketpulse/",  "weight": 2},
+    # --- ADDITIONS ---
+    {"name": "ForexLive",   "url": "https://www.forexlive.com/feed/news/",                    "weight": 3},
+    {"name": "DailyFX",     "url": "https://www.dailyfx.com/rss/",                             "weight": 2},
+    {"name": "Reuters USD", "url": "https://feeds.reuters.com/reuters/USdollarNews",          "weight": 2},
+    {"name": "MarketWatch Economy", "url": "https://www.marketwatch.com/rss/economy",         "weight": 2},
+]
+
+# Keywords that indicate EUR/USD relevance
+EUR_USD_KEYWORDS = [
+    "eur", "euro", "eurusd", "eur/usd", "usd", "dollar", "ecb", "federal reserve", "fed",
+    "inflation", "cpi", "gdp", "eurozone", "interest rate", "fomc",
+    "nfp", "payroll", "draghi", "lagarde", "powell", "forex", "fx",
+    "currency", "monetary policy", "pmi", "employment", "recession",
+    # --- ADDITIONS ---
+    "nonfarm", "non-farm", "jobless claims", "unemployment", "consumer confidence", "business climate",
+    "ifo", "zew", "bundesbank", "buba", "snb", "boe", "bank of england", "boj", "pboc",
+    "trade balance", "current account", "housing starts", "retail sales", "industrial production",
+    "yields", "bond auction", "fed speak", "ecb speak", "hawkish", "dovish", "taper", "qt", "qe", 
+    # --- ADDITIONS (EIA / Oil) ---
+    "eia", "crude oil", "oil inventory", "oil stockpile", "wti", "brent",
+    "energy information administration", "oil supply", "oil demand", "oil prices",
+    "opec", "iea", "strategic petroleum reserve", "spr", "cushing", "gasoline",
+    "refinery", "oil production", "oil glut", "oil shortage",
+]
+
+# Sentiment keywords — used to score headlines without ML library
+BULLISH_EUR = ["hawkish ecb", "rate hike ecb", "strong euro", "weak dollar",
+               "eur rises", "euro gains", "eur up", "bullish euro",
+               "better than expected eurozone", "eur/usd up",
+               # --- ADDITIONS ---
+               "ecb tightening", "ecb hawkish", "lagarde hawkish", "eurozone growth",
+               "german ifo beats", "french cpi up", "ecb tapering", "ecb rate rise",
+               "eurozone pmi beats", "german gdp up", "bund yields rise",
+               "weak usd", "dollar selloff", "dxy down", "usd index falls",
+               # --- ADDITIONS (Oil-related) ---
+               "oil prices surge", "crude rally", "oil supply shock", "oil inventory draw",
+               "oil shortage", "oil prices spike", "oil output cut", "opec cuts",
+               "oil demand strong", "oil prices hit high", "energy inflation"
+               ]
+
+BEARISH_EUR = ["dovish ecb", "rate cut ecb", "weak euro", "strong dollar",
+               "eur falls", "euro drops", "eur down", "bearish euro",
+               "worse than expected eurozone", "eur/usd down", "dollar rally",
+               # --- ADDITIONS ---
+               "ecb dovish", "ecb cuts", "lagarde dovish", "eurozone recession",
+               "german ifo misses", "french cpi down", "ecb easing", "ecb rate cut",
+               "eurozone pmi misses", "german gdp down", "bund yields fall",
+               "strong usd", "dollar rally", "dxy up", "usd index rises",
+               # --- ADDITIONS (Oil-related) ---
+               "oil prices plunge", "crude selloff", "oil supply glut", "oil inventory build",
+               "oil surplus", "oil price crash", "oil production high", "opec raises output",
+               "oil demand weak", "energy prices drop", "oil stocks build"
+               ]
+               
 SYMBOLS        = ["EURUSD"]  # unified display — actual source decided at runtime
 
 # ── Simple in-process cache ───────────────────────────────────────
@@ -877,6 +938,215 @@ def api_levels():
 @app.route("/levels")
 def levels_page():
     return render_template("levels.html")
+
+
+# ── News & sentiment helpers ──────────────────────────────────────
+
+def simple_sentiment(text):
+    """
+    Rule-based sentiment scorer — no ML library needed.
+    Returns score -1.0 (very bearish EUR) to +1.0 (very bullish EUR)
+    and a label.
+    """
+    text_l = text.lower()
+    score  = 0.0
+    for kw in BULLISH_EUR:
+        if kw in text_l: score += 0.4
+    for kw in BEARISH_EUR:
+        if kw in text_l: score -= 0.4
+    # General positive/negative words
+    pos_words = ["rise", "gain", "up", "high", "strong", "beat", "exceed",
+                 "surge", "rally", "boost", "optimism", "grow", "recover"]
+    neg_words = ["fall", "drop", "down", "low", "weak", "miss", "below",
+                 "plunge", "slump", "concern", "fear", "contract", "shrink",
+                 "recession", "crisis", "uncertainty"]
+    for w in pos_words:
+        if w in text_l: score += 0.15
+    for w in neg_words:
+        if w in text_l: score -= 0.15
+    score = max(-1.0, min(1.0, score))
+    if score >= 0.4:   label = "bullish"
+    elif score >= 0.15: label = "slightly bullish"
+    elif score <= -0.4: label = "bearish"
+    elif score <= -0.15: label = "slightly bearish"
+    else:               label = "neutral"
+    return {"score": round(score, 2), "label": label}
+
+def is_relevant(text):
+    """True if headline/description mentions EUR/USD relevant topics."""
+    text_l = text.lower()
+    return any(kw in text_l for kw in EUR_USD_KEYWORDS)
+
+def parse_rss(url, source_name, timeout=8):
+    """Parse an RSS feed and return list of article dicts."""
+    import xml.etree.ElementTree as ET
+    try:
+        r = requests.get(url, timeout=timeout,
+                         headers={"User-Agent": "Mozilla/5.0 LiquidScan/1.0"})
+        r.raise_for_status()
+        root = ET.fromstring(r.content)
+        channel = root.find("channel")
+        if channel is None:
+            channel = root
+        items = channel.findall("item")
+        articles = []
+        for item in items[:20]:
+            title = (item.findtext("title") or "").strip()
+            desc  = (item.findtext("description") or "").strip()
+            link  = (item.findtext("link") or "").strip()
+            pub   = (item.findtext("pubDate") or "").strip()
+            # Strip HTML tags from description
+            import re
+            desc = re.sub(r"<[^>]+>", "", desc)[:200]
+            full_text = title + " " + desc
+            if not is_relevant(full_text):
+                continue
+            sentiment = simple_sentiment(full_text)
+            articles.append({
+                "title":     title,
+                "desc":      desc,
+                "url":       link,
+                "published": pub[:25] if pub else "",
+                "source":    source_name,
+                "sentiment": sentiment,
+            })
+        return articles
+    except Exception as e:
+        return []
+
+def fetch_newsapi(query, max_articles=10):
+    """Fetch from NewsAPI with sentiment scoring."""
+    if not NEWS_API_KEY:
+        return []
+    try:
+        r = requests.get(NEWS_URL, params={
+            "q":        query,
+            "language": "en",
+            "sortBy":   "publishedAt",
+            "pageSize": max_articles,
+            "apiKey":   NEWS_API_KEY,
+        }, timeout=10)
+        data = r.json()
+        articles = []
+        for a in data.get("articles", []):
+            title = a.get("title") or ""
+            desc  = (a.get("description") or "")[:200]
+            full  = title + " " + desc
+            if not is_relevant(full):
+                continue
+            sentiment = simple_sentiment(full)
+            articles.append({
+                "title":     title,
+                "desc":      desc,
+                "url":       a.get("url", ""),
+                "published": (a.get("publishedAt") or "")[:16].replace("T"," "),
+                "source":    a.get("source", {}).get("name", "NewsAPI"),
+                "sentiment": sentiment,
+            })
+        return articles
+    except Exception:
+        return []
+
+def fetch_economic_calendar():
+    """
+    ForexFactory-style economic calendar from faireconomy.media.
+    Returns this week's events filtered for EUR and USD.
+    """
+    cache_key = "econ_calendar"
+    cached    = cache_get(cache_key, ttl=3600)  # refresh every hour
+    if cached:
+        return cached
+    try:
+        r = requests.get(FF_CALENDAR_URL, timeout=10,
+                         headers={"User-Agent": "Mozilla/5.0 LiquidScan/1.0"})
+        r.raise_for_status()
+        events = r.json()
+        # Filter EUR and USD events only
+        filtered = [e for e in events
+                    if e.get("country", "").upper() in ("EUR", "USD", "US", "EU")]
+        # Sort by date/time
+        result = sorted(filtered, key=lambda x: x.get("date", ""))
+        cache_set(cache_key, result)
+        return result
+    except Exception as e:
+        return []
+
+
+@app.route("/api/news_sentiment")
+def api_news_sentiment():
+    """
+    Aggregates news from NewsAPI + RSS feeds.
+    Scores each headline for EUR/USD sentiment.
+    Returns articles + overall sentiment summary.
+    Cached 15 minutes.
+    """
+    cached = cache_get("news_sentiment", ttl=900)
+    if cached:
+        return jsonify(cached)
+
+    all_articles = []
+
+    # NewsAPI — multiple targeted queries
+    queries = ["EUR USD forex", "ECB interest rate", "Federal Reserve dollar",
+               "eurozone inflation", "EURUSD"]
+    seen_titles = set()
+    for q in queries:
+        for a in fetch_newsapi(q, max_articles=5):
+            if a["title"] not in seen_titles:
+                seen_titles.add(a["title"])
+                all_articles.append(a)
+
+    # RSS feeds
+    for src in RSS_SOURCES:
+        for a in parse_rss(src["url"], src["name"]):
+            if a["title"] not in seen_titles:
+                seen_titles.add(a["title"])
+                all_articles.append(a)
+
+    # Sort by published date descending (most recent first)
+    all_articles.sort(key=lambda x: x.get("published", ""), reverse=True)
+    all_articles = all_articles[:40]  # cap at 40
+
+    # Overall sentiment summary
+    scores = [a["sentiment"]["score"] for a in all_articles if a.get("sentiment")]
+    avg_score = round(sum(scores) / len(scores), 3) if scores else 0.0
+
+    bull_count = sum(1 for s in scores if s >= 0.15)
+    bear_count = sum(1 for s in scores if s <= -0.15)
+    neut_count = len(scores) - bull_count - bear_count
+
+    if avg_score >= 0.3:    overall = "bullish"
+    elif avg_score >= 0.1:  overall = "slightly bullish"
+    elif avg_score <= -0.3: overall = "bearish"
+    elif avg_score <= -0.1: overall = "slightly bearish"
+    else:                   overall = "neutral"
+
+    result = {
+        "articles":     all_articles,
+        "count":        len(all_articles),
+        "sentiment": {
+            "avg_score":   avg_score,
+            "overall":     overall,
+            "bullish_count": bull_count,
+            "bearish_count": bear_count,
+            "neutral_count": neut_count,
+        },
+        "ts": now_utc(),
+    }
+    cache_set("news_sentiment", result)
+    return jsonify(result)
+
+
+@app.route("/api/calendar")
+def api_calendar():
+    """Economic calendar — EUR and USD events this week."""
+    events = fetch_economic_calendar()
+    return jsonify({"events": events, "count": len(events), "ts": now_utc()})
+
+
+@app.route("/news")
+def news_page():
+    return render_template("news.html")
 
 
 @app.route("/depth")

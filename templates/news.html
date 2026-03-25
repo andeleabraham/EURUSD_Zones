@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}News & Sentiment — LiquidScan{% endblock %}
+{% block head %}
+<style>
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.8rem}
+.page-title{font-size:1.1rem;font-weight:700;color:#fff}
+.page-sub{font-size:.75rem;color:var(--muted);margin-top:.2rem;font-family:'DM Mono',monospace}
+
+/* Sentiment overview */
+.sent-overview{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:1.2rem}
+@media(max-width:700px){.sent-overview{grid-template-columns:1fr 1fr}}
+.sent-tile{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:.8rem .9rem}
+.st-lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.3rem}
+.st-val{font-size:1.1rem;font-weight:600;font-family:'DM Mono',monospace;color:#fff}
+.st-val.bullish{color:var(--bid)}
+.st-val.bearish{color:var(--ask)}
+.st-val.neutral{color:var(--muted)}
+.st-val.slightly-bullish{color:#86efac}
+.st-val.slightly-bearish{color:#fca5a5}
+
+/* Sentiment meter */
+.sent-meter{margin-bottom:1.2rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:.9rem 1rem}
+.sm-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;flex-wrap:wrap;gap:.4rem}
+.sm-title{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:'DM Mono',monospace}
+.sm-overall{font-size:.82rem;font-weight:600;font-family:'DM Mono',monospace}
+.sm-track{height:12px;background:var(--border);border-radius:6px;position:relative;overflow:visible;margin:.4rem 0}
+.sm-fill{height:100%;border-radius:6px;transition:width .5s,background .5s}
+.sm-needle{position:absolute;top:-4px;width:3px;height:20px;background:#fff;border-radius:1.5px;transform:translateX(-50%);transition:left .5s}
+.sm-labels{display:flex;justify-content:space-between;font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.2rem}
+.bar-counts{display:flex;gap:1.2rem;margin-top:.5rem;flex-wrap:wrap}
+.bc{font-size:.72rem;font-family:'DM Mono',monospace}
+.bc.bull{color:var(--bid)} .bc.bear{color:var(--ask)} .bc.neut{color:var(--muted)}
+
+/* Main layout */
+.news-layout{display:grid;grid-template-columns:1fr 300px;gap:14px}
+@media(max-width:860px){.news-layout{grid-template-columns:1fr}}
+
+/* News feed */
+.news-feed{}
+.feed-controls{display:flex;gap:6px;margin-bottom:.8rem;flex-wrap:wrap;align-items:center}
+.feed-controls .lbl{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace}
+
+.article{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:.85rem .9rem;margin-bottom:.5rem;transition:border-color .15s}
+.article:hover{border-color:var(--border2)}
+.art-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.35rem}
+.art-title{font-size:.83rem;font-weight:600;color:#fff;line-height:1.35;flex:1}
+.art-title a{color:#fff;text-decoration:none}
+.art-title a:hover{color:var(--acc)}
+.sent-badge{flex-shrink:0;font-size:.62rem;padding:2px 7px;border-radius:10px;font-weight:600;font-family:'DM Mono',monospace;white-space:nowrap}
+.sent-badge.bullish{background:var(--bid-dim);color:var(--bid);border:1px solid #22c55e40}
+.sent-badge.bearish{background:var(--ask-dim);color:var(--ask);border:1px solid #ef444440}
+.sent-badge.neutral{background:var(--surf2);color:var(--muted);border:1px solid var(--border)}
+.sent-badge.slightly-bullish{background:#0d2018;color:#86efac;border:1px solid #86efac40}
+.sent-badge.slightly-bearish{background:#200d0d;color:#fca5a5;border:1px solid #fca5a540}
+.art-desc{font-size:.75rem;color:var(--muted);line-height:1.5;margin-bottom:.4rem}
+.art-meta{display:flex;align-items:center;gap:.7rem;font-size:.65rem;color:var(--faint);font-family:'DM Mono',monospace}
+.art-src{color:var(--acc2)}
+.sent-bar{height:3px;border-radius:2px;margin-top:.4rem;transition:width .3s}
+
+/* Economic calendar */
+.calendar-panel{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:.9rem}
+.cal-title{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.7rem}
+.cal-event{padding:.45rem .5rem;border-radius:var(--r);margin-bottom:3px;border-left:2px solid}
+.cal-event.high{border-color:var(--ask);background:var(--ask-dim)}
+.cal-event.medium{border-color:var(--warn);background:#161000}
+.cal-event.low{border-color:var(--border2);background:var(--surf2)}
+.cal-row1{display:flex;align-items:center;justify-content:space-between;gap:.4rem;flex-wrap:wrap}
+.cal-name{font-size:.76rem;font-weight:500;color:#fff;flex:1}
+.cal-currency{font-size:.62rem;padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;font-weight:600}
+.cal-eur .cal-currency{background:#1a1000;color:#fbbf24;border:1px solid #fbbf2440}
+.cal-usd .cal-currency{background:#0d1a2a;color:#60a5fa;border:1px solid #60a5fa40}
+.cal-impact{font-size:.6rem;padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;font-weight:600}
+.high .cal-impact{background:var(--ask-dim);color:var(--ask)}
+.medium .cal-impact{background:#161000;color:var(--warn)}
+.low .cal-impact{color:var(--muted)}
+.cal-row2{display:flex;gap:.6rem;margin-top:.2rem;font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace;flex-wrap:wrap}
+.cal-row2 span b{color:var(--text)}
+.cal-time{font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+.cal-empty{color:var(--muted);font-size:.75rem;font-family:'DM Mono',monospace;padding:.5rem 0}
+
+/* AI endpoint note */
+.ai-note{background:var(--surf2);border:1px solid var(--border);border-radius:var(--r2);padding:.8rem 1rem;margin-top:1rem;font-size:.72rem;font-family:'DM Mono',monospace;color:var(--muted)}
+.ai-note b{color:var(--acc2)}
+.ai-note code{color:var(--acc);background:var(--surf);padding:1px 5px;border-radius:3px}
+
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--muted);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{padding:2rem;text-align:center;color:var(--muted);font-size:.8rem;font-family:'DM Mono',monospace}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-hdr">
+  <div>
+    <div class="page-title">News & fundamentals</div>
+    <div class="page-sub">EUR/USD sentiment · economic calendar · multi-source aggregation</div>
+  </div>
+  <button class="btn btn-green" onclick="load()">↻ Refresh</button>
+</div>
+
+<!-- Sentiment overview tiles -->
+<div class="sent-overview">
+  <div class="sent-tile"><div class="st-lbl">Overall bias</div><div class="st-val" id="ov-overall">—</div></div>
+  <div class="sent-tile"><div class="st-lbl">Avg score</div><div class="st-val" id="ov-score">—</div></div>
+  <div class="sent-tile"><div class="st-lbl">Bullish signals</div><div class="st-val bullish" id="ov-bull">—</div></div>
+  <div class="sent-tile"><div class="st-lbl">Bearish signals</div><div class="st-val bearish" id="ov-bear">—</div></div>
+  <div class="sent-tile"><div class="st-lbl">Articles loaded</div><div class="st-val" id="ov-count">—</div></div>
+</div>
+
+<!-- Sentiment meter -->
+<div class="sent-meter">
+  <div class="sm-hdr">
+    <span class="sm-title">EUR/USD sentiment meter</span>
+    <span class="sm-overall" id="sm-overall-lbl">loading…</span>
+  </div>
+  <div class="sm-track">
+    <div class="sm-fill" id="sm-fill" style="width:50%;background:var(--muted)"></div>
+    <div class="sm-needle" id="sm-needle" style="left:50%"></div>
+  </div>
+  <div class="sm-labels">
+    <span>Very bearish EUR</span>
+    <span>Neutral</span>
+    <span>Very bullish EUR</span>
+  </div>
+  <div class="bar-counts">
+    <span class="bc bull" id="bc-bull">— bullish</span>
+    <span class="bc neut" id="bc-neut">— neutral</span>
+    <span class="bc bear" id="bc-bear">— bearish</span>
+    <span style="font-size:.65rem;color:var(--faint);font-family:'DM Mono',monospace;margin-left:auto" id="news-ts">—</span>
+  </div>
+</div>
+
+<div class="news-layout">
+  <!-- News feed -->
+  <div>
+    <div class="feed-controls">
+      <span class="lbl">Filter:</span>
+      <button class="btn active" onclick="setFilter('all',this)">All</button>
+      <button class="btn" onclick="setFilter('bullish',this)">Bullish</button>
+      <button class="btn" onclick="setFilter('bearish',this)">Bearish</button>
+      <button class="btn" onclick="setFilter('neutral',this)">Neutral</button>
+      <span style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-left:auto" id="feed-count">—</span>
+    </div>
+    <div id="news-feed"><div class="loading"><span class="sp"></span>Loading news…</div></div>
+  </div>
+
+  <!-- Calendar -->
+  <div>
+    <div class="calendar-panel">
+      <div class="cal-title">Economic calendar — this week</div>
+      <div id="cal-body"><div class="loading"><span class="sp"></span></div></div>
+    </div>
+
+    <div class="ai-note">
+      <div style="margin-bottom:.4rem;color:var(--text)">AI endpoint (future)</div>
+      Structured data ready for AI analysis:<br><br>
+      <code>GET /api/news_sentiment</code><br>
+      Returns articles + sentiment scores + overall bias.<br><br>
+      <code>GET /api/calendar</code><br>
+      Returns upcoming high-impact events.<br><br>
+      Combined with <code>/api/levels</code> and <code>/api/nearest_walls</code>, an AI model receives: <b>fundamentals + technicals + liquidity</b> — the full picture for a trade decision.
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allArticles = [];
+let sentFilter  = 'all';
+
+function setFilter(v, btn) {
+  sentFilter = v;
+  document.querySelectorAll('.feed-controls .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderFeed();
+}
+
+function sentClass(label) {
+  return (label || 'neutral').replace(' ', '-');
+}
+
+function sentColor(score) {
+  if (score >= 0.3)  return 'var(--bid)';
+  if (score >= 0.1)  return '#86efac';
+  if (score <= -0.3) return 'var(--ask)';
+  if (score <= -0.1) return '#fca5a5';
+  return 'var(--muted)';
+}
+
+async function load() {
+  try {
+    const [newsRes, calRes] = await Promise.all([
+      fetch('/api/news_sentiment'),
+      fetch('/api/calendar'),
+    ]);
+    const news = await newsRes.json();
+    const cal  = await calRes.json();
+    allArticles = news.articles || [];
+    renderSentiment(news.sentiment, news);
+    renderFeed();
+    renderCalendar(cal.events || []);
+    setLive(true);
+  } catch(e) {
+    document.getElementById('news-feed').innerHTML =
+      `<div class="loading">Failed to load: ${e.message}</div>`;
+    setLive(false);
+  }
+}
+
+function renderSentiment(s, news) {
+  if (!s) return;
+  const cls = sentClass(s.overall);
+  const el  = document.getElementById('ov-overall');
+  el.textContent = s.overall;
+  el.className   = 'st-val ' + cls;
+  document.getElementById('ov-score').textContent  = s.avg_score > 0 ? '+'+s.avg_score : s.avg_score;
+  document.getElementById('ov-bull').textContent   = s.bullish_count;
+  document.getElementById('ov-bear').textContent   = s.bearish_count;
+  document.getElementById('ov-count').textContent  = news.count || 0;
+  document.getElementById('sm-overall-lbl').textContent = s.overall;
+  document.getElementById('sm-overall-lbl').style.color = sentColor(s.avg_score);
+
+  // Meter: map -1..+1 to 0..100%
+  const pct = Math.round((s.avg_score + 1) / 2 * 100);
+  const col = sentColor(s.avg_score);
+  document.getElementById('sm-fill').style.width      = pct + '%';
+  document.getElementById('sm-fill').style.background = col;
+  document.getElementById('sm-needle').style.left     = pct + '%';
+  document.getElementById('bc-bull').textContent = s.bullish_count + ' bullish';
+  document.getElementById('bc-neut').textContent = s.neutral_count + ' neutral';
+  document.getElementById('bc-bear').textContent = s.bearish_count + ' bearish';
+  document.getElementById('news-ts').textContent = 'as of ' + (news.ts||'').slice(11,19) + ' UTC · 15m cache';
+}
+
+function renderFeed() {
+  const filtered = sentFilter === 'all' ? allArticles
+    : allArticles.filter(a => {
+        const lbl = (a.sentiment?.label || 'neutral');
+        if (sentFilter === 'bullish') return lbl.includes('bullish');
+        if (sentFilter === 'bearish') return lbl.includes('bearish');
+        if (sentFilter === 'neutral') return lbl === 'neutral';
+        return true;
+      });
+
+  document.getElementById('feed-count').textContent = `${filtered.length} articles`;
+
+  if (!filtered.length) {
+    document.getElementById('news-feed').innerHTML =
+      '<div class="loading">No articles match this filter.</div>';
+    return;
+  }
+
+  document.getElementById('news-feed').innerHTML = filtered.map(a => {
+    const s    = a.sentiment || {score:0, label:'neutral'};
+    const cls  = sentClass(s.label);
+    const col  = sentColor(s.score);
+    const barW = Math.abs(s.score) * 100;
+    return `<div class="article">
+      <div class="art-hdr">
+        <div class="art-title">
+          <a href="${a.url}" target="_blank" rel="noopener">${a.title}</a>
+        </div>
+        <span class="sent-badge ${cls}">${s.label}</span>
+      </div>
+      ${a.desc ? `<div class="art-desc">${a.desc}</div>` : ''}
+      <div class="art-meta">
+        <span class="art-src">${a.source}</span>
+        <span>${a.published || ''}</span>
+        <span>score: <b style="color:${col}">${s.score > 0 ? '+' : ''}${s.score}</b></span>
+      </div>
+      <div class="sent-bar" style="width:${barW}%;background:${col}"></div>
+    </div>`;
+  }).join('');
+}
+
+function renderCalendar(events) {
+  if (!events.length) {
+    document.getElementById('cal-body').innerHTML =
+      '<div class="cal-empty">No calendar data — ForexFactory may be unavailable.</div>';
+    return;
+  }
+
+  const now = new Date();
+  const html = events.slice(0, 30).map(e => {
+    const impact   = (e.impact || e.type || 'low').toLowerCase();
+    const currency = (e.country || e.currency || '').toUpperCase();
+    const isEUR    = currency.includes('EUR') || currency.includes('EU');
+    const isUSD    = currency.includes('USD') || currency.includes('US');
+    const curClass = isEUR ? 'cal-eur' : isUSD ? 'cal-usd' : '';
+    const name     = e.title || e.name || e.event || 'Event';
+    const time     = e.date ? new Date(e.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'}) + ' UTC' : '';
+    const forecast = e.forecast != null ? e.forecast : '—';
+    const previous = e.previous != null ? e.previous : '—';
+    const actual   = e.actual   != null ? `<b style="color:var(--acc)">${e.actual}</b>` : '—';
+
+    return `<div class="cal-event ${impact} ${curClass}">
+      <div class="cal-row1">
+        <span class="cal-name">${name}</span>
+        <span class="cal-currency">${currency}</span>
+        <span class="cal-impact">${impact.toUpperCase()}</span>
+        <span class="cal-time">${time}</span>
+      </div>
+      <div class="cal-row2">
+        <span>Prev: <b>${previous}</b></span>
+        <span>Fcst: <b>${forecast}</b></span>
+        <span>Act: ${actual}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('cal-body').innerHTML = html ||
+    '<div class="cal-empty">No EUR/USD events this week.</div>';
+}
+
+load();
+setInterval(load, 15 * 60 * 1000);
+</script>
+{% endblock %}
