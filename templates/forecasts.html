@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Forecasts - LiquidScan{% endblock %}
+{% block head %}
+<style>
+.page-hdr{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.2rem}
+.page-title{font-size:1.2rem;font-weight:700;color:#fff}
+.page-sub{font-size:.75rem;color:var(--muted);margin-top:.2rem;font-family:'DM Mono',monospace}
+.stack{display:grid;gap:14px}
+.hero-grid{display:grid;grid-template-columns:1.4fr .9fr;gap:14px}
+.triple{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.quad{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.table-wrap{overflow:auto}
+.pill{display:inline-flex;align-items:center;padding:.2rem .55rem;border-radius:999px;font-size:.68rem;font-family:'DM Mono',monospace;border:1px solid var(--border2);color:var(--muted)}
+.pill.bullish{color:var(--bid);border-color:#22c55e50;background:#22c55e12}
+.pill.bearish{color:var(--ask);border-color:#ef444450;background:#ef444412}
+.pill.neutral{color:var(--warn);border-color:#f59e0b50;background:#f59e0b12}
+.metric{padding:.9rem;border:1px solid var(--border);border-radius:var(--r2);background:var(--surf2)}
+.metric-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.35rem}
+.metric-value{font-size:1.05rem;color:#fff;font-family:'DM Mono',monospace}
+.metric-sub{font-size:.72rem;color:var(--muted);margin-top:.35rem;font-family:'DM Mono',monospace}
+.summary{line-height:1.7;color:var(--text);font-size:.9rem}
+table{width:100%;border-collapse:collapse}
+th,td{padding:.65rem .7rem;border-bottom:1px solid var(--border);text-align:left;font-size:.78rem}
+th{color:var(--muted);font-family:'DM Mono',monospace;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+td{color:var(--text)}
+.empty{padding:2rem;text-align:center;color:var(--muted);font-family:'DM Mono',monospace}
+@media(max-width:960px){.hero-grid,.triple,.quad{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-hdr">
+  <div>
+    <div class="page-title">Forecast feed</div>
+    <div class="page-sub">Latest EUR/USD forecast pushed from the R Markdown report</div>
+  </div>
+  <a class="btn btn-green" href="/api/forecasts/latest" target="_blank">Open JSON</a>
+</div>
+
+{% if report %}
+{% set payload = report.payload %}
+{% set horizons = payload.get('horizon_summaries', {}) %}
+{% set sessions = payload.get('session_forecasts', []) %}
+{% set models = payload.get('simulation_models', []) %}
+
+<div class="stack">
+  <div class="hero-grid">
+    <div class="card">
+      <div class="sec-lbl">Forecast Snapshot</div>
+      <div class="summary">
+        <div><b>{{ report.report_title }}</b></div>
+        <div class="page-sub" style="margin:.5rem 0 1rem 0">Report date: {{ report.report_date or report.created_at }} · Source: {{ report.source or 'r_markdown' }}</div>
+        <div>{{ payload.get('summary_text', 'No summary text was pushed with this report yet.') }}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec-lbl">Bias Overview</div>
+      <div class="triple">
+        <div class="metric">
+          <div class="metric-label">Daily</div>
+          <div class="metric-value"><span class="pill {{ (report.daily_bias or 'neutral')|lower }}">{{ report.daily_bias or 'N/A' }}</span></div>
+          <div class="metric-sub">{{ horizons.get('daily', {}).get('projected_low', 'N/A') }} to {{ horizons.get('daily', {}).get('projected_high', 'N/A') }}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Weekly</div>
+          <div class="metric-value"><span class="pill {{ (report.weekly_bias or 'neutral')|lower }}">{{ report.weekly_bias or 'N/A' }}</span></div>
+          <div class="metric-sub">{{ horizons.get('weekly', {}).get('projected_low', 'N/A') }} to {{ horizons.get('weekly', {}).get('projected_high', 'N/A') }}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Monthly</div>
+          <div class="metric-value"><span class="pill {{ (report.monthly_bias or 'neutral')|lower }}">{{ report.monthly_bias or 'N/A' }}</span></div>
+          <div class="metric-sub">{{ horizons.get('monthly', {}).get('projected_low', 'N/A') }} to {{ horizons.get('monthly', {}).get('projected_high', 'N/A') }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-lbl">Horizon Levels</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Horizon</th>
+            <th>Bias</th>
+            <th>Forecast Close</th>
+            <th>Projected Low</th>
+            <th>Projected High</th>
+            <th>Support</th>
+            <th>Resistance</th>
+            <th>RSI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key, label in [('daily', 'Daily'), ('weekly', 'Weekly'), ('monthly', 'Monthly')] %}
+          {% set row = horizons.get(key, {}) %}
+          <tr>
+            <td>{{ label }}</td>
+            <td><span class="pill {{ (row.get('bias', 'neutral'))|lower }}">{{ row.get('bias', 'N/A') }}</span></td>
+            <td>{{ row.get('forecast_close', 'N/A') }}</td>
+            <td>{{ row.get('projected_low', 'N/A') }}</td>
+            <td>{{ row.get('projected_high', 'N/A') }}</td>
+            <td>{{ row.get('support', 'N/A') }}</td>
+            <td>{{ row.get('resistance', 'N/A') }}</td>
+            <td>{{ row.get('rsi', 'N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-lbl">Simulation Models</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Horizon</th>
+            <th>Model</th>
+            <th>Bullish Probability</th>
+            <th>Median Close</th>
+            <th>P10</th>
+            <th>P90</th>
+            <th>Move SD</th>
+            <th>Regime</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in models %}
+          <tr>
+            <td>{{ row.get('horizon', 'N/A') }}</td>
+            <td>{{ row.get('model', 'N/A') }}</td>
+            <td>{{ row.get('bullish_probability', 'N/A') }}</td>
+            <td>{{ row.get('median_close', 'N/A') }}</td>
+            <td>{{ row.get('p10_close', 'N/A') }}</td>
+            <td>{{ row.get('p90_close', 'N/A') }}</td>
+            <td>{{ row.get('move_sd', 'N/A') }}</td>
+            <td>{{ row.get('regime', 'N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="hero-grid">
+    <div class="card">
+      <div class="sec-lbl">Session Forecasts</div>
+      {% if sessions %}
+      <div class="quad">
+        {% for row in sessions %}
+        <div class="metric">
+          <div class="metric-label">{{ row.get('session', 'Session') }}</div>
+          <div class="metric-value"><span class="pill {{ (row.get('bias', 'neutral'))|lower }}">{{ row.get('bias', 'N/A') }}</span></div>
+          <div class="metric-sub">Close {{ row.get('last_close', 'N/A') }}</div>
+          <div class="metric-sub">Range {{ row.get('projected_low', 'N/A') }} to {{ row.get('projected_high', 'N/A') }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">No session data was pushed with this report.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="sec-lbl">Push Metadata</div>
+      <div class="summary">
+        <div><b>Created:</b> {{ report.created_at }}</div>
+        <div><b>Symbol:</b> {{ report.symbol }}</div>
+        <div><b>Payload size:</b> {{ report.payload_json|length }} chars</div>
+        <div><b>Origin:</b> R Markdown knit push</div>
+        <div style="margin-top:.7rem"><a href="/api/forecasts/latest" target="_blank">View raw latest payload</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card empty">No forecast has been pushed yet. Knit the R Markdown report with API push enabled to populate this page.</div>
+{% endif %}
+{% endblock %}

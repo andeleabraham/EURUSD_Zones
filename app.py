@@ -1,4 +1,4 @@
-import os, sqlite3, requests, time
+import os, sqlite3, requests, time, json
 from datetime import datetime, timezone
 from flask import Flask, render_template, jsonify, request, g, redirect, url_for, flash
 
@@ -248,6 +248,18 @@ def init_db():
                 reason      TEXT,
                 fired_at    TEXT    NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS forecast_reports (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol          TEXT    NOT NULL DEFAULT 'EURUSD',
+                report_title    TEXT    NOT NULL DEFAULT 'EUR/USD Forecast',
+                report_date     TEXT,
+                source          TEXT,
+                daily_bias      TEXT,
+                weekly_bias     TEXT,
+                monthly_bias    TEXT,
+                payload_json    TEXT    NOT NULL,
+                created_at      TEXT    NOT NULL
+            );
         """)
         db.commit()
 
@@ -256,6 +268,31 @@ def now_utc():
 
 def row_to_dict(r):
     return dict(r)
+
+def parse_json_text(raw, default=None):
+    if not raw:
+        return default
+    try:
+        return json.loads(raw)
+    except Exception:
+        return default
+
+def fetch_latest_forecast_report(symbol="EURUSD"):
+    row = get_db().execute(
+        """
+        SELECT * FROM forecast_reports
+        WHERE symbol=?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (symbol,)
+    ).fetchone()
+    if not row:
+        return None
+
+    item = row_to_dict(row)
+    item["payload"] = parse_json_text(item.get("payload_json"), default={}) or {}
+    return item
 
 def _get(url, params=None, timeout=10):
     """Raw HTTP GET — returns parsed JSON or raises."""
@@ -420,6 +457,67 @@ def _normalise_ticker(price, open_p, high, low, bid, ask, volume, change_pct, so
 @app.route("/")
 def index():
     return render_template("index.html", symbols=SYMBOLS)
+
+@app.route("/forecasts")
+def forecasts_page():
+    latest = fetch_latest_forecast_report("EURUSD")
+    return render_template("forecasts.html", report=latest)
+
+@app.route("/api/forecasts/latest")
+def api_forecasts_latest():
+    symbol = request.args.get("symbol", "EURUSD").upper()
+    latest = fetch_latest_forecast_report(symbol)
+    if not latest:
+        return jsonify({"count": 0, "report": None}), 404
+    return jsonify({"count": 1, "report": latest})
+
+@app.route("/api/forecasts/push", methods=["POST"])
+def api_forecasts_push():
+    required_token = os.environ.get("FORECAST_PUSH_TOKEN", "").strip()
+    provided_token = (request.headers.get("X-Forecast-Token") or "").strip()
+
+    if required_token and provided_token != required_token:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({"error": "Expected JSON payload"}), 400
+
+    symbol = str(data.get("symbol", "EURUSD")).upper()
+    report_title = str(data.get("report_title", "EUR/USD Forecast"))
+    report_date = data.get("report_date") or now_utc()
+    source = data.get("source", "r_markdown")
+
+    horizon_summaries = data.get("horizon_summaries", {}) or {}
+    daily_bias = (horizon_summaries.get("daily", {}) or {}).get("bias")
+    weekly_bias = (horizon_summaries.get("weekly", {}) or {}).get("bias")
+    monthly_bias = (horizon_summaries.get("monthly", {}) or {}).get("bias")
+
+    created_at = now_utc()
+    payload_json = json.dumps(data, ensure_ascii=False)
+
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO forecast_reports
+        (symbol, report_title, report_date, source, daily_bias, weekly_bias, monthly_bias, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            symbol, report_title, report_date, source,
+            daily_bias, weekly_bias, monthly_bias,
+            payload_json, created_at
+        )
+    )
+    db.commit()
+
+    latest = fetch_latest_forecast_report(symbol)
+    return jsonify({
+        "status": "stored",
+        "report_id": latest["id"] if latest else None,
+        "symbol": symbol,
+        "created_at": created_at
+    }), 201
 
 
 @app.route("/api/price")
