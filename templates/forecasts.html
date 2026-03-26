@@ -40,8 +40,11 @@ td{color:var(--text)}
 {% if report %}
 {% set payload = report.payload %}
 {% set horizons = payload.get('horizon_summaries', {}) %}
+{% set horizon_compare = payload.get('horizon_comparison', []) %}
 {% set sessions = payload.get('session_forecasts', []) %}
 {% set models = payload.get('simulation_models', []) %}
+{% set dxy = payload.get('dxy_context', {}) %}
+{% set integrity = report.get('integrity', {}) %}
 
 <div class="stack">
   <div class="hero-grid">
@@ -51,6 +54,7 @@ td{color:var(--text)}
         <div><b>{{ report.report_title }}</b></div>
         <div class="page-sub" style="margin:.5rem 0 1rem 0">Report date: {{ report.report_date or report.created_at }} · Source: {{ report.source or 'r_markdown' }}</div>
         <div>{{ payload.get('summary_text', 'No summary text was pushed with this report yet.') }}</div>
+        <div class="page-sub" style="margin-top:1rem">Forecast mode: {{ payload.get('forecast_mode', 'price_only') }}</div>
       </div>
     </div>
     <div class="card">
@@ -103,6 +107,58 @@ td{color:var(--text)}
             <td>{{ row.get('support', 'N/A') }}</td>
             <td>{{ row.get('resistance', 'N/A') }}</td>
             <td>{{ row.get('rsi', 'N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-lbl">DXY Context</div>
+    {% if dxy %}
+    <div class="triple">
+      {% for key, label in [('daily', 'Daily'), ('weekly', 'Weekly'), ('monthly', 'Monthly')] %}
+      {% set row = dxy.get('horizons', {}).get(key, {}) %}
+      <div class="metric">
+        <div class="metric-label">{{ label }}</div>
+        <div class="metric-value"><span class="pill {{ (row.get('eurusd_effect', 'neutral'))|lower }}">{{ row.get('eurusd_effect', 'N/A') }}</span></div>
+        <div class="metric-sub">DXY bias {{ row.get('dxy_bias', 'N/A') }}</div>
+        <div class="metric-sub">DXY close {{ row.get('dxy_close', 'N/A') }} · RSI {{ row.get('dxy_rsi', 'N/A') }}</div>
+        <div class="metric-sub">EUR/USD adjustment {{ row.get('eurusd_adjustment', 'N/A') }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">No DXY context was pushed with this report.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="sec-lbl">Horizon Comparison</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Horizon</th>
+            <th>Model</th>
+            <th>Bias</th>
+            <th>Forecast Close</th>
+            <th>Projected Low</th>
+            <th>Projected High</th>
+            <th>DXY Adjustment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in horizon_compare %}
+          <tr>
+            <td>{{ row.get('Horizon', 'N/A') }}</td>
+            <td>{{ row.get('Model', 'N/A') }}</td>
+            <td>{{ row.get('Bias', 'N/A') }}</td>
+            <td>{{ row.get('Forecast Close', 'N/A') }}</td>
+            <td>{{ row.get('Projected Low', 'N/A') }}</td>
+            <td>{{ row.get('Projected High', 'N/A') }}</td>
+            <td>{{ row.get('DXY Adjustment', 'N/A') }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -170,6 +226,9 @@ td{color:var(--text)}
         <div><b>Symbol:</b> {{ report.symbol }}</div>
         <div><b>Payload size:</b> {{ report.payload_json|length }} chars</div>
         <div><b>Origin:</b> R Markdown knit push</div>
+        <div><b>DXY bias:</b> {{ report.dxy_bias or 'N/A' }}</div>
+        <div><b>SHA-256:</b> {{ integrity.get('payload_sha256', 'N/A') }}</div>
+        <div><b>Signature valid:</b> {{ 'Yes' if integrity.get('signature_valid') else 'No' }}</div>
         <div style="margin-top:.7rem"><a href="/api/forecasts/latest" target="_blank">View raw latest payload</a></div>
       </div>
     </div>

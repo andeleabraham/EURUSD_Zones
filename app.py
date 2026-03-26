@@ -1,4 +1,4 @@
-import os, sqlite3, requests, time, json
+import os, sqlite3, requests, time, json, hmac, hashlib
 from datetime import datetime, timezone
 from flask import Flask, render_template, jsonify, request, g, redirect, url_for, flash
 
@@ -257,10 +257,22 @@ def init_db():
                 daily_bias      TEXT,
                 weekly_bias     TEXT,
                 monthly_bias    TEXT,
+                dxy_bias        TEXT,
                 payload_json    TEXT    NOT NULL,
+                payload_sha256  TEXT,
+                signature_valid INTEGER NOT NULL DEFAULT 0,
                 created_at      TEXT    NOT NULL
             );
         """)
+        for stmt in [
+            "ALTER TABLE forecast_reports ADD COLUMN dxy_bias TEXT",
+            "ALTER TABLE forecast_reports ADD COLUMN payload_sha256 TEXT",
+            "ALTER TABLE forecast_reports ADD COLUMN signature_valid INTEGER NOT NULL DEFAULT 0"
+        ]:
+            try:
+                db.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
         db.commit()
 
 def now_utc():
@@ -292,6 +304,10 @@ def fetch_latest_forecast_report(symbol="EURUSD"):
 
     item = row_to_dict(row)
     item["payload"] = parse_json_text(item.get("payload_json"), default={}) or {}
+    item["integrity"] = {
+        "payload_sha256": item.get("payload_sha256"),
+        "signature_valid": bool(item.get("signature_valid")),
+    }
     return item
 
 def _get(url, params=None, timeout=10):
@@ -475,9 +491,27 @@ def api_forecasts_latest():
 def api_forecasts_push():
     required_token = os.environ.get("FORECAST_PUSH_TOKEN", "").strip()
     provided_token = (request.headers.get("X-Forecast-Token") or "").strip()
+    provided_signature = (request.headers.get("X-Forecast-Signature") or "").strip()
+    provided_sha256 = (request.headers.get("X-Payload-SHA256") or "").strip()
+    raw_body = request.get_data() or b""
+    computed_sha256 = hashlib.sha256(raw_body).hexdigest()
 
     if required_token and provided_token != required_token:
         return jsonify({"error": "Unauthorized"}), 401
+
+    signature_valid = 0
+    if required_token:
+        expected_signature = hmac.new(
+            required_token.encode("utf-8"),
+            raw_body,
+            hashlib.sha256
+        ).hexdigest()
+        if not provided_signature or not hmac.compare_digest(provided_signature, expected_signature):
+            return jsonify({"error": "Invalid signature"}), 401
+        signature_valid = 1
+
+    if provided_sha256 and not hmac.compare_digest(provided_sha256, computed_sha256):
+        return jsonify({"error": "Payload digest mismatch"}), 400
 
     data = request.get_json(silent=True) or {}
     if not data:
@@ -492,21 +526,23 @@ def api_forecasts_push():
     daily_bias = (horizon_summaries.get("daily", {}) or {}).get("bias")
     weekly_bias = (horizon_summaries.get("weekly", {}) or {}).get("bias")
     monthly_bias = (horizon_summaries.get("monthly", {}) or {}).get("bias")
+    dxy_context = data.get("dxy_context", {}) or {}
+    dxy_bias = ((dxy_context.get("horizons", {}) or {}).get("daily", {}) or {}).get("dxy_bias")
 
     created_at = now_utc()
-    payload_json = json.dumps(data, ensure_ascii=False)
+    payload_json = raw_body.decode("utf-8", errors="replace") if raw_body else json.dumps(data, ensure_ascii=False)
 
     db = get_db()
     db.execute(
         """
         INSERT INTO forecast_reports
-        (symbol, report_title, report_date, source, daily_bias, weekly_bias, monthly_bias, payload_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (symbol, report_title, report_date, source, daily_bias, weekly_bias, monthly_bias, dxy_bias, payload_json, payload_sha256, signature_valid, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             symbol, report_title, report_date, source,
             daily_bias, weekly_bias, monthly_bias,
-            payload_json, created_at
+            dxy_bias, payload_json, computed_sha256, signature_valid, created_at
         )
     )
     db.commit()
@@ -516,7 +552,9 @@ def api_forecasts_push():
         "status": "stored",
         "report_id": latest["id"] if latest else None,
         "symbol": symbol,
-        "created_at": created_at
+        "created_at": created_at,
+        "payload_sha256": computed_sha256,
+        "signature_valid": bool(signature_valid)
     }), 201
 
 
