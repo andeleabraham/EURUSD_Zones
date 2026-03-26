@@ -51,6 +51,14 @@ nav{display:flex;gap:2px;overflow-x:auto;flex-shrink:1}
 nav a{padding:4px 10px;border-radius:var(--r);font-size:.78rem;font-weight:600;color:var(--muted);white-space:nowrap;transition:color .15s,background .15s;font-family:'DM Mono',monospace}
 nav a:hover{color:var(--text);background:var(--surf)}
 nav a.active{color:var(--acc);background:var(--surf2)}
+.nav-links{display:flex;gap:2px;overflow-x:auto;flex-shrink:1}
+.nav-toggle{display:none;align-items:center;justify-content:center;width:38px;height:38px;border-radius:var(--r);border:1px solid var(--border2);background:transparent;color:var(--text);cursor:pointer;flex-shrink:0}
+.nav-toggle:hover{background:var(--surf2)}
+.nav-toggle span{display:block;width:16px;height:2px;background:currentColor;position:relative}
+.nav-toggle span::before,.nav-toggle span::after{content:'';position:absolute;left:0;width:16px;height:2px;background:currentColor}
+.nav-toggle span::before{top:-5px}
+.nav-toggle span::after{top:5px}
+.mobile-nav{display:none}
 
 .live-chip{display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
 .ldot{width:6px;height:6px;border-radius:50%;background:var(--acc);box-shadow:0 0 5px var(--acc);animation:blink 2s ease-in-out infinite}
@@ -76,6 +84,32 @@ main{flex:1;padding:1.5rem;max-width:1440px;margin:0 auto;width:100%}
 .alert-error{background:#ef444412;border-color:var(--ask);color:var(--ask)}
 
 footer{padding:.9rem 1.5rem;text-align:center;color:var(--faint);font-size:.7rem;border-top:1px solid var(--border);font-family:'DM Mono',monospace}
+@media(max-width:860px){
+  header{height:auto;min-height:52px;flex-wrap:wrap;padding:.7rem 1rem}
+  nav{display:none}
+  .live-chip{margin-left:auto}
+  .nav-toggle{display:inline-flex}
+  .mobile-nav{display:none;width:100%;padding-top:.4rem}
+  .mobile-nav.open{display:block}
+  .mobile-nav .nav-links{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+    overflow:visible;
+  }
+  .mobile-nav a{
+    padding:.75rem .8rem;
+    font-size:.82rem;
+    text-align:center;
+    border:1px solid var(--border);
+    background:var(--surf);
+    color:var(--text);
+  }
+  .mobile-nav a.active{
+    border-color:var(--acc);
+    background:#3de8a012;
+  }
+}
 </style>
 {% block head %}{% endblock %}
 </head>
@@ -95,7 +129,22 @@ footer{padding:.9rem 1.5rem;text-align:center;color:var(--faint);font-size:.7rem
     <a href="/zones" class="{% if 'zone' in request.endpoint %}active{% endif %}">Zones</a>
     <a href="/api/zones" target="_blank">API</a>
   </nav>
+  <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="mobile-nav">
+    <span></span>
+  </button>
   <div class="live-chip"><div class="ldot" id="ldot"></div><span id="ltxt">connecting</span></div>
+  <div class="mobile-nav" id="mobile-nav">
+    <div class="nav-links">
+      <a href="/" class="{% if request.endpoint=='index' %}active{% endif %}">Dashboard</a>
+      <a href="/liquidity" class="{% if request.endpoint=='liquidity_page' %}active{% endif %}">Liquidity</a>
+      <a href="/depth" class="{% if request.endpoint=='depth_page' %}active{% endif %}">Depth</a>
+      <a href="/levels" class="{% if request.endpoint=='levels_page' %}active{% endif %}">Levels</a>
+      <a href="/trade-setups" class="{% if request.endpoint=='trade_setups_page' %}active{% endif %}">Trade Setups</a>
+      <a href="/forecasts" class="{% if request.endpoint=='forecasts_page' %}active{% endif %}">Forecasts</a>
+      <a href="/news" class="{% if request.endpoint=='news_page' %}active{% endif %}">News</a>
+      <a href="/zones" class="{% if 'zone' in request.endpoint %}active{% endif %}">Zones</a>
+    </div>
+  </div>
 </header>
 <main>
   {% if get_flashed_messages() %}
@@ -120,6 +169,14 @@ function fmt(n,d){if(n===null||n===undefined||isNaN(n))return'—';return parseF
 function fmtK(n){if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return parseFloat(n).toFixed(2)}
 function pct(price,ref){const d=((price-ref)/ref*100);return(d>=0?'+':'')+d.toFixed(3)+'%'}
 function timeAgo(s){const d=new Date(s+'Z'),now=new Date(),m=Math.floor((now-d)/60000);if(m<1)return'just now';if(m<60)return m+'m ago';return Math.floor(m/60)+'h ago'}
+const navToggle=document.getElementById('nav-toggle');
+const mobileNav=document.getElementById('mobile-nav');
+if(navToggle&&mobileNav){
+  navToggle.addEventListener('click',()=>{
+    const open=mobileNav.classList.toggle('open');
+    navToggle.setAttribute('aria-expanded',open?'true':'false');
+  });
+}
 </script>
 {% block scripts %}{% endblock %}
 </body>
