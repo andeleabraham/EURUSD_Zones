@@ -5,37 +5,41 @@
 .page-hdr{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.8rem}
 .page-title{font-size:1.1rem;font-weight:700;color:#fff}
 .page-sub{font-size:.75rem;color:var(--muted);margin-top:.2rem;font-family:'DM Mono',monospace}
-.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-bottom:1rem}
-@media(max-width:960px){.hero{grid-template-columns:1fr}}
-.card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:1rem}
-.sec-lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:.7rem}
-#cw{position:relative;width:100%;height:520px}
-#cc{width:100%;height:100%}
-.tip{position:absolute;background:var(--surf2);border:1px solid var(--border2);border-radius:var(--r);padding:5px 9px;font-family:'DM Mono',monospace;font-size:.72rem;color:var(--text);pointer-events:none;white-space:nowrap;display:none;z-index:10}
-.bet-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-@media(max-width:760px){.bet-grid{grid-template-columns:1fr}}
-.bet-card{border-radius:var(--r2);padding:.9rem 1rem;border:1px solid}
-.bet-card.buy{border-color:var(--bid);background:var(--bid-dim)}
-.bet-card.sell{border-color:var(--ask);background:var(--ask-dim)}
-.bet-card.bold-buy{border-color:var(--warn);background:#161000}
-.bet-card.bold-sell{border-color:#a855f7;background:#0e0016}
-.bet-action,.meta,.note,.px-strip,.legend{font-family:'DM Mono',monospace}
-.bet-action{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.3rem}
-.bet-card.buy .bet-action{color:var(--bid)} .bet-card.sell .bet-action{color:var(--ask)} .bet-card.bold-buy .bet-action{color:var(--warn)} .bet-card.bold-sell .bet-action{color:#a855f7}
-.setup{font-size:.82rem;color:var(--text);margin-bottom:.35rem}
-.range{font-size:1rem;font-weight:600;font-family:'DM Mono',monospace;color:#fff;margin-bottom:.35rem}
-.meta{font-size:.72rem;color:var(--muted);line-height:1.6}
-.meta b{color:var(--text)}
-.note{font-size:.64rem;color:var(--muted);border-top:1px solid var(--border);padding-top:.35rem;margin-top:.45rem;line-height:1.5}
-.pill{display:inline-flex;align-items:center;padding:.16rem .45rem;border-radius:999px;border:1px solid var(--border2);font-size:.58rem;margin-left:.35rem}
-.px-strip{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.7rem 1rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:1rem;font-size:.74rem;color:var(--muted)}
-.px-strip b,.summary b{color:var(--text)}
-.legend{display:flex;gap:.9rem;flex-wrap:wrap;margin-top:.8rem;font-size:.65rem;color:var(--muted)}
-.leg{display:flex;align-items:center;gap:4px}
-.leg-dot{width:10px;height:4px;border-radius:2px}
-.summary{font-size:.74rem;color:var(--muted);line-height:1.7}
-.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--muted);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
-@keyframes spin{to{transform:rotate(360deg)}}
+.context-grid{display:grid;grid-template-columns:1.3fr .9fr .9fr;gap:12px;margin-bottom:1rem}
+.context-card,.setup-card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r2);padding:1rem}
+.context-card{min-height:140px}
+.sec-lbl,.meta,.small,.setup-type,.setup-side,.stats,.label,.logic{font-family:'DM Mono',monospace}
+.sec-lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:.7rem}
+.summary{font-size:.82rem;color:var(--text);line-height:1.65}
+.summary b{color:#fff}
+.bias-pill{display:inline-flex;align-items:center;padding:.16rem .5rem;border-radius:999px;border:1px solid var(--border2);font-size:.64rem}
+.bias-pill.bullish{color:var(--bid);border-color:#22c55e60;background:#22c55e12}
+.bias-pill.bearish{color:var(--ask);border-color:#ef444460;background:#ef444412}
+.bias-pill.neutral{color:var(--warn);border-color:#f59e0b60;background:#f59e0b12}
+.value{font-size:1.08rem;color:#fff;font-family:'DM Mono',monospace}
+.small{font-size:.7rem;color:var(--muted)}
+.setup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:980px){.context-grid,.setup-grid{grid-template-columns:1fr}}
+.setup-card{border-width:1px}
+.setup-card.buy{border-color:#22c55e55;background:#0d2018}
+.setup-card.sell{border-color:#ef444455;background:#200d0d}
+.setup-card.bold-buy{border-color:#f59e0b55;background:#171203}
+.setup-card.bold-sell{border-color:#a855f755;background:#14081f}
+.setup-type{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.25rem}
+.setup-card.buy .setup-type{color:var(--bid)}
+.setup-card.sell .setup-type{color:var(--ask)}
+.setup-card.bold-buy .setup-type{color:var(--warn)}
+.setup-card.bold-sell .setup-type{color:#c084fc}
+.setup-side{font-size:.84rem;color:#fff;margin-bottom:.35rem}
+.range{font-size:1.02rem;font-weight:600;color:#fff;font-family:'DM Mono',monospace;margin-bottom:.4rem}
+.logic{font-size:.72rem;color:var(--muted);line-height:1.65}
+.logic b{color:var(--text)}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:.7rem 0}
+.stat{padding:.55rem .65rem;border:1px solid var(--border);border-radius:var(--r);background:#00000018}
+.label{font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.18rem}
+.stat b{font-size:.82rem;color:#fff}
+.empty{padding:2rem;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;border:1px dashed var(--border2);border-radius:var(--r2)}
+.hint-list{display:grid;gap:.35rem}
 </style>
 {% endblock %}
 
@@ -43,184 +47,279 @@
 <div class="page-hdr">
   <div>
     <div class="page-title">Trade setups</div>
-    <div class="page-sub">Entry ideas derived from the nearest bid and ask liquidity walls around current EUR/USD price.</div>
+    <div class="page-sub">Liquidity walls, technical levels, and the latest daily forecast are combined to rank EUR/USD long and short ideas.</div>
   </div>
   <button class="btn btn-green" onclick="init()">Refresh</button>
 </div>
 
-<div class="px-strip">
-  <span>Current price <b id="cur-px">-</b></span>
-  <span>Trend <b id="trend-lbl">-</b></span>
-  <span>Day range <b id="range-lbl">-</b></span>
-  <span>Bias <b id="bias-lbl">-</b></span>
-</div>
-
-<div class="hero">
-  <div class="card">
-    <div class="sec-lbl">Setup Map</div>
-    <div id="cw"><canvas id="cc"></canvas><div class="tip" id="tip"></div></div>
-    <div class="legend">
-      <div class="leg"><div class="leg-dot" style="background:var(--bid)"></div>Buy zone</div>
-      <div class="leg"><div class="leg-dot" style="background:var(--ask)"></div>Sell zone</div>
-      <div class="leg"><div class="leg-dot" style="background:var(--warn)"></div>Bold setup</div>
-      <div class="leg"><div class="leg-dot" style="background:var(--acc)"></div>Current price</div>
-    </div>
+<div class="context-grid">
+  <div class="context-card">
+    <div class="sec-lbl">Market Snapshot</div>
+    <div class="summary" id="market-summary">Loading...</div>
   </div>
-  <div class="card">
-    <div class="sec-lbl">Setup Logic</div>
-    <div class="summary">
-      <div>Trade setups are generated from the nearest liquidity walls and filtered with current day trend context.</div>
-      <div>Buy setups focus on bid walls below price. Sell setups focus on ask walls above price.</div>
-      <div>Bold setups highlight larger walls at least 20 pips away that may act like magnets or reaction zones.</div>
-      <div>P/L previews use approximate pip values for 0.01, 0.05, and 0.10 lots.</div>
+  <div class="context-card">
+    <div class="sec-lbl">Forecast Bias</div>
+    <div class="summary" id="forecast-summary">Loading...</div>
+  </div>
+  <div class="context-card">
+    <div class="sec-lbl">Selection Rules</div>
+    <div class="hint-list small">
+      <div>Regular setups require at least <b>10 pips</b>.</div>
+      <div>Priority is given to setups in the <b>20-50 pip</b> zone.</div>
+      <div>Bold setups are allowed into the <b>50-120+ pip</b> zone.</div>
+      <div>Buys must enter below their target. Sells must enter above their target.</div>
     </div>
   </div>
 </div>
 
-<div class="bet-grid" id="bet-grid">
-  <div class="card"><span class="sp"></span>Loading trade setups...</div>
+<div class="setup-grid" id="setup-grid">
+  <div class="empty">Loading trade setups...</div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-let wallData = null;
-let trendCtx = null;
-let midPrice = null;
-const C={bid:'#22c55e',ask:'#ef4444',warn:'#f59e0b',bold:'#a855f7',acc:'#3de8a0',grid:'#1c2436',txt:'#485878',surf:'#111620'};
-function fmt(n,d){ return parseFloat(n).toFixed(d ?? 4); }
-function fmtK(n){ return n>=1000?(n/1000).toFixed(1)+'K':parseFloat(n).toFixed(1); }
-function pip2usd(pips, lot){ return (Math.abs(pips)*0.10*(lot/0.01)).toFixed(2); }
+let priceCtx = null;
+let wallCtx = null;
+let levelsCtx = null;
+let forecastCtx = null;
 
-async function loadPrice() {
-  const res = await fetch('/api/price');
-  const data = await res.json();
-  const t = (data.tickers || [])[0];
-  if (!t || t.error) return;
-  trendCtx = t;
-  midPrice = (t.bid + t.ask) / 2;
-  document.getElementById('cur-px').textContent = fmt(midPrice,5);
-  document.getElementById('trend-lbl').textContent = t.trend;
-  document.getElementById('range-lbl').textContent = `${t.day_range_pips} pips`;
-  document.getElementById('bias-lbl').textContent = t.trend === 'bullish' ? 'Favor longs on pullbacks' : t.trend === 'bearish' ? 'Favor shorts on rallies' : 'Neutral';
+function fmt(n,d){ return n!=null && !isNaN(n) ? parseFloat(n).toFixed(d ?? 4) : '-'; }
+function pipValueUsd(pips, lot){ return (Math.abs(pips) * 0.10 * (lot / 0.01)).toFixed(2); }
+function biasPill(bias){
+  const cls = (bias || 'neutral').toLowerCase();
+  return `<span class="bias-pill ${cls}">${bias || 'N/A'}</span>`;
 }
 
-async function loadWalls() {
-  const res = await fetch('/api/nearest_walls?top_by_vol=30&n=8&min_gap=0.0003');
-  const data = await res.json();
-  if (data.error) return;
-  wallData = data;
-  if (data.mid) midPrice = data.mid;
+async function loadAll() {
+  const [priceRes, wallsRes, levelsRes, forecastRes] = await Promise.allSettled([
+    fetch('/api/price').then(r => r.json()),
+    fetch('/api/nearest_walls?top_by_vol=30&n=8&min_gap=0.0003').then(r => r.json()),
+    fetch('/api/levels?tf=d1').then(r => r.json()),
+    fetch('/api/forecasts/latest').then(async r => r.ok ? r.json() : {report:null})
+  ]);
+
+  priceCtx = priceRes.status === 'fulfilled' ? (priceRes.value.tickers || [])[0] : null;
+  wallCtx = wallsRes.status === 'fulfilled' ? wallsRes.value : null;
+  levelsCtx = levelsRes.status === 'fulfilled' ? levelsRes.value : null;
+  forecastCtx = forecastRes.status === 'fulfilled' ? forecastRes.value.report : null;
 }
 
-function buildCards() {
-  if (!wallData || !midPrice) return [];
-  const bids = wallData.bid_walls || [];
-  const asks = wallData.ask_walls || [];
-  const maxQ = wallData.all_top.length ? wallData.all_top[0].qty : 1;
-  const trend = trendCtx ? trendCtx.trend : 'flat';
-  const nearBid = bids[0];
-  const nearAsk = asks[0];
-  const boldBid = bids.find(lv => lv.pips >= 20 && lv.is_wall);
-  const boldAsk = asks.find(lv => lv.pips >= 20 && lv.is_wall);
-  const cards = [];
+function collectTechnicalLevels(levels, price) {
+  const out = [];
+  const add = (name, value, kind, family) => {
+    if (value == null || isNaN(value)) return;
+    out.push({name, value, kind, family, pips: Math.round((value - price) / 0.0001)});
+  };
 
-  if (nearBid) {
-    const entry = nearBid.price, target = nearAsk ? nearAsk.price : midPrice + 0.0020;
-    cards.push({
-      cls:'buy', title:'Buy setup', pill:'LONG',
-      setup:`Look for a reaction at the nearest bid wall near ${fmt(entry,4)}.`,
-      entry, target, pips:Math.round((target-entry)/0.0001),
-      note: trend === 'bearish' ? 'Trend is bearish, so wait for confirmation before entry.' : 'Trend support is favorable for this setup.',
-      wallQty:fmtK(nearBid.qty), wallPct:Math.round(nearBid.qty/maxQ*100)
-    });
+  if (!levels) return out;
+  if (levels.classic) {
+    add('Classic PP', levels.classic.pp, 'pivot', 'classic');
+    ['r1','r2','r3'].forEach(k => add(k.toUpperCase(), levels.classic[k], 'resistance', 'classic'));
+    ['s1','s2','s3'].forEach(k => add(k.toUpperCase(), levels.classic[k], 'support', 'classic'));
   }
-  if (nearAsk) {
-    const entry = nearAsk.price, target = nearBid ? nearBid.price : midPrice - 0.0020;
-    cards.push({
-      cls:'sell', title:'Sell setup', pill:'SHORT',
-      setup:`Watch for rejection at the nearest ask wall near ${fmt(entry,4)}.`,
-      entry, target, pips:Math.round((entry-target)/0.0001),
-      note: trend === 'bullish' ? 'Trend is bullish, so wait for confirmation before entry.' : 'Trend support is favorable for this setup.',
-      wallQty:fmtK(nearAsk.qty), wallPct:Math.round(nearAsk.qty/maxQ*100)
-    });
+  if (levels.camarilla) {
+    ['r1','r2','r3','r4'].forEach(k => add('C' + k.toUpperCase(), levels.camarilla[k], 'resistance', 'camarilla'));
+    ['s1','s2','s3','s4'].forEach(k => add('C' + k.toUpperCase(), levels.camarilla[k], 'support', 'camarilla'));
   }
-  if (boldBid) {
-    const entry = boldBid.price, target = nearAsk ? Math.min(nearAsk.price, midPrice) : midPrice;
-    cards.push({
-      cls:'bold-buy', title:'Bold buy', pill:'KEY LONG',
-      setup:`Set an alert or pending buy near the large bid wall at ${fmt(entry,4)}.`,
-      entry, target, pips:Math.round((target-entry)/0.0001),
-      note:`This wall is ${Math.round(boldBid.pips)} pips below price and carries ${Math.round(boldBid.qty/maxQ*100)}% of visible peak volume.`,
-      wallQty:fmtK(boldBid.qty), wallPct:Math.round(boldBid.qty/maxQ*100)
-    });
+  if (levels.woodie) {
+    add('Woodie PP', levels.woodie.pp, 'pivot', 'woodie');
+    ['r1','r2','r3'].forEach(k => add('W' + k.toUpperCase(), levels.woodie[k], 'resistance', 'woodie'));
+    ['s1','s2','s3'].forEach(k => add('W' + k.toUpperCase(), levels.woodie[k], 'support', 'woodie'));
   }
-  if (boldAsk) {
-    const entry = boldAsk.price, target = nearBid ? Math.max(nearBid.price, midPrice) : midPrice;
-    cards.push({
-      cls:'bold-sell', title:'Bold sell', pill:'KEY SHORT',
-      setup:`Set an alert or pending sell near the large ask wall at ${fmt(entry,4)}.`,
-      entry, target, pips:Math.round((entry-target)/0.0001),
-      note:`This wall is ${Math.round(boldAsk.pips)} pips above price and carries ${Math.round(boldAsk.qty/maxQ*100)}% of visible peak volume.`,
-      wallQty:fmtK(boldAsk.qty), wallPct:Math.round(boldAsk.qty/maxQ*100)
-    });
+  if (levels.fibonacci && levels.fibonacci.retracements) {
+    Object.entries(levels.fibonacci.retracements).forEach(([k,v]) => add('Fib ' + k, v, v > price ? 'resistance' : 'support', 'fibonacci'));
   }
-  return cards;
+  if (levels.vwap) {
+    add('VWAP', levels.vwap.vwap, 'pivot', 'vwap');
+    add('VWAP +1σ', levels.vwap.upper_1, 'resistance', 'vwap');
+    add('VWAP +2σ', levels.vwap.upper_2, 'resistance', 'vwap');
+    add('VWAP -1σ', levels.vwap.lower_1, 'support', 'vwap');
+    add('VWAP -2σ', levels.vwap.lower_2, 'support', 'vwap');
+  }
+  if (levels.murray && levels.murray.levels) {
+    Object.entries(levels.murray.levels).forEach(([k,v]) => add(k.split('—')[0].trim(), v, v > price ? 'resistance' : 'support', 'murray'));
+  }
+  return out;
 }
 
-function renderCards() {
-  const cards = buildCards();
-  if (!cards.length) {
-    document.getElementById('bet-grid').innerHTML = '<div class="card">No nearby trade setups are available from current liquidity walls.</div>';
+function getForecastDaily() {
+  const payload = forecastCtx && forecastCtx.payload ? forecastCtx.payload : null;
+  const horizon = payload && payload.horizon_summaries ? payload.horizon_summaries.daily : null;
+  return {
+    bias: horizon && horizon.bias ? horizon.bias : 'Neutral',
+    low: horizon && horizon.projected_low ? parseFloat(horizon.projected_low) : null,
+    high: horizon && horizon.projected_high ? parseFloat(horizon.projected_high) : null,
+    mode: payload && payload.forecast_mode ? payload.forecast_mode : 'price_only'
+  };
+}
+
+function scoreBuy(entry, target, bidWall, askWall, supports, resistances, currentPrice, forecast) {
+  const pips = Math.round((target - entry) / 0.0001);
+  if (!(entry < target) || pips < 10) return null;
+  const confluence = supports.filter(x => Math.abs(x.value - entry) <= 0.0006);
+  const nearNow = Math.abs(currentPrice - entry) / 0.0001 <= 4;
+  const waitPips = Math.round((currentPrice - entry) / 0.0001);
+  if (entry > currentPrice + 0.0001) return null;
+  let score = 0;
+  score += Math.min(35, Math.round((bidWall.qty / (wallCtx.all_top[0]?.qty || bidWall.qty)) * 35));
+  score += Math.min(18, confluence.length * 6);
+  score += pips >= 20 && pips <= 50 ? 18 : pips > 50 ? 12 : 8;
+  if (forecast.bias === 'Bullish') score += 12;
+  if (forecast.bias === 'Bearish') score -= 10;
+  if (nearNow) score += 6;
+  return {
+    side: pips >= 50 ? 'bold-buy' : 'buy',
+    title: pips >= 50 ? 'Bold buy setup' : 'Buy setup',
+    setupType: nearNow ? 'Buy now / on touch' : 'Buy limit',
+    entry, target, pips, score,
+    stop: entry - Math.max(0.0008, (target - entry) * 0.35),
+    entryNote: nearNow ? `Price is already near the bid region around ${fmt(entry,4)}.` : `Wait for price to retrace ${waitPips} pips into the bid region around ${fmt(entry,4)}.`,
+    confluence,
+    sourceWall: bidWall,
+    targetWall: askWall,
+    targetLevels: resistances.filter(x => Math.abs(x.value - target) <= 0.0008)
+  };
+}
+
+function scoreSell(entry, target, askWall, bidWall, supports, resistances, currentPrice, forecast) {
+  const pips = Math.round((entry - target) / 0.0001);
+  if (!(entry > target) || pips < 10) return null;
+  const confluence = resistances.filter(x => Math.abs(x.value - entry) <= 0.0006);
+  const nearNow = Math.abs(currentPrice - entry) / 0.0001 <= 4;
+  const waitPips = Math.round((entry - currentPrice) / 0.0001);
+  if (entry < currentPrice - 0.0001) return null;
+  let score = 0;
+  score += Math.min(35, Math.round((askWall.qty / (wallCtx.all_top[0]?.qty || askWall.qty)) * 35));
+  score += Math.min(18, confluence.length * 6);
+  score += pips >= 20 && pips <= 50 ? 18 : pips > 50 ? 12 : 8;
+  if (forecast.bias === 'Bearish') score += 12;
+  if (forecast.bias === 'Bullish') score -= 10;
+  if (nearNow) score += 6;
+  return {
+    side: pips >= 50 ? 'bold-sell' : 'sell',
+    title: pips >= 50 ? 'Bold sell setup' : 'Sell setup',
+    setupType: nearNow ? 'Sell now / on touch' : 'Sell limit',
+    entry, target, pips, score,
+    stop: entry + Math.max(0.0008, (entry - target) * 0.35),
+    entryNote: nearNow ? `Price is already near the ask region around ${fmt(entry,4)}.` : `Wait for price to rally ${waitPips} pips into the ask region around ${fmt(entry,4)}.`,
+    confluence,
+    sourceWall: askWall,
+    targetWall: bidWall,
+    targetLevels: supports.filter(x => Math.abs(x.value - target) <= 0.0008)
+  };
+}
+
+function buildSetups() {
+  if (!priceCtx || !wallCtx || !levelsCtx) return [];
+  const currentPrice = (priceCtx.bid + priceCtx.ask) / 2;
+  const techLevels = collectTechnicalLevels(levelsCtx, currentPrice);
+  const supports = techLevels.filter(x => x.kind === 'support').sort((a,b) => b.value - a.value);
+  const resistances = techLevels.filter(x => x.kind === 'resistance').sort((a,b) => a.value - b.value);
+  const bidWalls = (wallCtx.bid_walls || []).filter(w => w.qty > 0).sort((a,b) => a.price - b.price);
+  const askWalls = (wallCtx.ask_walls || []).filter(w => w.qty > 0).sort((a,b) => a.price - b.price);
+  const forecast = getForecastDaily();
+  const setups = [];
+
+  bidWalls.forEach(bidWall => {
+    const entryCandidates = [bidWall.price, ...supports.filter(s => Math.abs(s.value - bidWall.price) <= 0.0007).map(s => s.value)];
+    const entry = Math.min(...entryCandidates);
+    const targets = [
+      ...askWalls.filter(a => a.price > entry + 0.0010).map(a => ({value: a.price, askWall: a})),
+      ...resistances.filter(r => r.value > entry + 0.0010).map(r => ({value: r.value, askWall: null}))
+    ].sort((a,b) => a.value - b.value);
+    const targetPick = targets.find(t => {
+      const pips = Math.round((t.value - entry) / 0.0001);
+      return pips >= 20 && pips <= 60;
+    }) || targets.find(t => {
+      const pips = Math.round((t.value - entry) / 0.0001);
+      return pips >= 10 && pips <= 120;
+    });
+    if (!targetPick) return;
+    const setup = scoreBuy(entry, targetPick.value, bidWall, targetPick.askWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast);
+    if (setup) setups.push(setup);
+  });
+
+  askWalls.forEach(askWall => {
+    const entryCandidates = [askWall.price, ...resistances.filter(r => Math.abs(r.value - askWall.price) <= 0.0007).map(r => r.value)];
+    const entry = Math.max(...entryCandidates);
+    const targets = [
+      ...bidWalls.filter(b => b.price < entry - 0.0010).map(b => ({value: b.price, bidWall: b})),
+      ...supports.filter(s => s.value < entry - 0.0010).map(s => ({value: s.value, bidWall: null}))
+    ].sort((a,b) => b.value - a.value);
+    const targetPick = targets.find(t => {
+      const pips = Math.round((entry - t.value) / 0.0001);
+      return pips >= 20 && pips <= 60;
+    }) || targets.find(t => {
+      const pips = Math.round((entry - t.value) / 0.0001);
+      return pips >= 10 && pips <= 120;
+    });
+    if (!targetPick) return;
+    const setup = scoreSell(entry, targetPick.value, askWall, targetPick.bidWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast);
+    if (setup) setups.push(setup);
+  });
+
+  const dedup = new Map();
+  setups.forEach(s => {
+    const key = `${s.side}:${fmt(s.entry,4)}:${fmt(s.target,4)}`;
+    if (!dedup.has(key) || dedup.get(key).score < s.score) dedup.set(key, s);
+  });
+
+  return [...dedup.values()].sort((a,b) => b.score - a.score).slice(0, 6);
+}
+
+function renderContext() {
+  const currentPrice = priceCtx ? (priceCtx.bid + priceCtx.ask) / 2 : null;
+  const forecast = getForecastDaily();
+  document.getElementById('market-summary').innerHTML = priceCtx ? `
+    <div>Current EUR/USD price is <b>${fmt(currentPrice,5)}</b> with day trend marked as <b>${priceCtx.trend}</b>.</div>
+    <div>Spread is <b>${fmt(priceCtx.spread,5)}</b>, day range is <b>${priceCtx.day_range_pips} pips</b>, and price sits <b>${priceCtx.range_position}%</b> through today's range.</div>
+    <div>The setup engine favors pullback buys in bullish conditions and rally sells in bearish conditions, but still requires valid liquidity-to-target distance.</div>
+  ` : 'Price context unavailable.';
+
+  document.getElementById('forecast-summary').innerHTML = forecastCtx ? `
+    <div>Daily forecast bias is ${biasPill(forecast.bias)}.</div>
+    <div class="small" style="margin-top:.5rem">Projected daily range: <b>${fmt(forecast.low,5)}</b> to <b>${fmt(forecast.high,5)}</b>.</div>
+    <div class="small" style="margin-top:.4rem">Forecast mode: <b>${forecast.mode}</b>.</div>
+  ` : 'No forecast report is currently available.';
+}
+
+function renderSetups() {
+  const setups = buildSetups();
+  const host = document.getElementById('setup-grid');
+  if (!setups.length) {
+    host.innerHTML = '<div class="empty">No setups passed the minimum distance and confluence rules. This usually means the current wall-to-target map is too tight or lacks confirmation from levels/forecast bias.</div>';
     return;
   }
-  document.getElementById('bet-grid').innerHTML = cards.map(c => `
-    <div class="bet-card ${c.cls}">
-      <div class="bet-action">${c.title}<span class="pill">${c.pill}</span></div>
-      <div class="setup">${c.setup}</div>
-      <div class="range">${fmt(c.entry,4)} → ${fmt(c.target,4)}</div>
-      <div class="meta"><b>${Math.abs(c.pips)} pips</b> · wall ${c.wallQty} (${c.wallPct}% volume)</div>
-      <div class="meta">0.01 lot <b>$${pip2usd(c.pips,0.01)}</b> · 0.05 lot <b>$${pip2usd(c.pips,0.05)}</b> · 0.10 lot <b>$${pip2usd(c.pips,0.10)}</b></div>
-      <div class="note">${c.note}</div>
-    </div>`).join('');
-}
 
-function drawChart() {
-  const wrap = document.getElementById('cw'), canvas = document.getElementById('cc');
-  if (!wrap || !canvas || !wallData || !midPrice) return;
-  const bids = wallData.bid_walls || [], asks = wallData.ask_walls || [];
-  const levels = [...bids.map(x => ({...x, side:'bid'})), ...asks.map(x => ({...x, side:'ask'}))];
-  const vis = levels.filter(l => Math.abs(l.pips) <= 140);
-  if (!vis.length) return;
-  const DPR = window.devicePixelRatio || 1, W = wrap.clientWidth, H = wrap.clientHeight;
-  canvas.width = W*DPR; canvas.height = H*DPR; canvas.style.width = W+'px'; canvas.style.height = H+'px';
-  const ctx = canvas.getContext('2d'); ctx.scale(DPR,DPR); ctx.clearRect(0,0,W,H);
-  const pMin = Math.min(...vis.map(v => v.price), midPrice) - 0.0010, pMax = Math.max(...vis.map(v => v.price), midPrice) + 0.0010;
-  const PL=76, PR=90, PT=16, PB=24, cW=W-PL-PR, cH=H-PT-PB;
-  function yOf(p){ return PT + cH - ((p-pMin)/(pMax-pMin))*cH; }
-  ctx.fillStyle=C.surf; ctx.fillRect(0,0,W,H);
-  for(let i=0;i<=8;i++){ const p=pMin+(i/8)*(pMax-pMin), y=yOf(p); ctx.strokeStyle=C.grid; ctx.lineWidth=0.5; ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR,y); ctx.stroke(); ctx.fillStyle=C.txt; ctx.font='10px DM Mono,monospace'; ctx.textAlign='right'; ctx.fillText(fmt(p,4), PL-6, y+3); }
-  const maxQ = Math.max(...vis.map(v => v.qty), 1), maxBar = cW * 0.42;
-  vis.forEach(lv => {
-    const y=yOf(lv.price), barW=(lv.qty/maxQ)*maxBar, col=lv.side==='bid'?C.bid:C.ask, accent=lv.is_wall&&lv.pips>=20?C.warn:col;
-    ctx.fillStyle=accent; ctx.globalAlpha=lv.is_wall?0.6:0.24; ctx.fillRect(W-PR-barW, y-4, barW, 8); ctx.globalAlpha=1;
-    ctx.strokeStyle=accent; ctx.lineWidth=lv.is_wall?1.1:0.45; ctx.setLineDash(lv.is_wall?[5,3]:[2,5]); ctx.globalAlpha=lv.is_wall?0.55:0.15; ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR-barW,y); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
-    if (lv.is_wall) { ctx.fillStyle=accent; ctx.font='10px DM Mono,monospace'; ctx.textAlign='left'; ctx.fillText(`${fmt(lv.price,4)} · ${Math.round(lv.pips)}p`, W-PR+6, y+3); }
-  });
-  const yM=yOf(midPrice); ctx.strokeStyle=C.acc; ctx.lineWidth=2.2; ctx.beginPath(); ctx.moveTo(PL,yM); ctx.lineTo(W-PR,yM); ctx.stroke(); ctx.fillStyle='#000'; ctx.fillRect(PL,yM-10,70,20); ctx.strokeStyle=C.acc; ctx.lineWidth=0.8; ctx.strokeRect(PL,yM-10,70,20); ctx.fillStyle=C.acc; ctx.font='10px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText(fmt(midPrice,4), PL+35, yM+4);
-  const tip = document.getElementById('tip');
-  canvas.onmousemove=(e)=>{ const rect=canvas.getBoundingClientRect(), mx=e.clientX-rect.left, my=e.clientY-rect.top; let closest=null, cd=Infinity; vis.forEach(lv=>{ const d=Math.abs(yOf(lv.price)-my); if(d<cd&&d<10){cd=d;closest=lv;} }); if(closest){ const col=closest.side==='bid'?C.bid:C.ask; tip.style.display='block'; tip.style.left=(mx+14)+'px'; tip.style.top=(my-12)+'px'; tip.innerHTML=`<b style="color:${col}">${fmt(closest.price,4)}</b> ${closest.side.toUpperCase()} · ${Math.round(closest.pips)}p · ${fmtK(closest.qty)} EUR`; } else tip.style.display='none'; };
-  canvas.onmouseleave=()=>{ tip.style.display='none'; };
+  host.innerHTML = setups.map(s => `
+    <div class="setup-card ${s.side}">
+      <div class="setup-type">${s.title}</div>
+      <div class="setup-side">${s.setupType}</div>
+      <div class="range">${fmt(s.entry,4)} → ${fmt(s.target,4)}</div>
+      <div class="logic">${s.entryNote}</div>
+      <div class="stats">
+        <div class="stat"><div class="label">Target Distance</div><b>${Math.abs(s.pips)} pips</b></div>
+        <div class="stat"><div class="label">Score</div><b>${s.score}</b></div>
+        <div class="stat"><div class="label">Stop Reference</div><b>${fmt(s.stop,4)}</b></div>
+        <div class="stat"><div class="label">0.01 Lot</div><b>$${pipValueUsd(s.pips,0.01)}</b></div>
+      </div>
+      <div class="logic">
+        <div><b>Liquidity entry:</b> ${fmt(s.sourceWall.price,4)} using ${Math.round(s.sourceWall.qty)} units of visible liquidity.</div>
+        <div><b>Target zone:</b> ${fmt(s.target,4)}${s.targetWall && s.targetWall.qty ? ` with ${Math.round(s.targetWall.qty)} units on the opposite side.` : ' from technical resistance/support.'}</div>
+        <div><b>Technical confluence:</b> ${s.confluence.length ? s.confluence.map(c => `${c.name} (${c.family})`).join(', ') : 'none nearby'}</div>
+        <div><b>Target confluence:</b> ${s.targetLevels.length ? s.targetLevels.map(c => `${c.name} (${c.family})`).join(', ') : 'liquidity-led target'}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 async function init() {
-  await loadPrice();
-  await loadWalls();
-  renderCards();
-  drawChart();
+  await loadAll();
+  renderContext();
+  renderSetups();
 }
 
 init();
-window.addEventListener('resize', () => { if (wallData) drawChart(); });
 </script>
 {% endblock %}
