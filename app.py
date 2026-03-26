@@ -39,7 +39,11 @@ RSS_SOURCES = [
     {"name": "ForexLive",   "url": "https://www.forexlive.com/feed/news/",                    "weight": 3},
     {"name": "DailyFX",     "url": "https://www.dailyfx.com/rss/",                             "weight": 2},
     {"name": "Reuters USD", "url": "https://feeds.reuters.com/reuters/USdollarNews",          "weight": 2},
-    {"name": "MarketWatch Economy", "url": "https://www.marketwatch.com/rss/economy",         "weight": 2},
+    {"name": "MarketWatch Economy", "url": "https://www.marketwatch.com/rss/economy",         "weight": 2}, 
+    # --- ADDITIONS (EIA / Oil Sources) ---
+    {"name": "EIA Official", "url": "https://www.eia.gov/rss/energy.xml",                      "weight": 2},
+    {"name": "OilPrice.com", "url": "https://oilprice.com/rss/rss-main",                       "weight": 2},
+    {"name": "Reuters Oil",  "url": "https://feeds.reuters.com/reuters/energyNews",           "weight": 2},
 ]
 
 # Keywords that indicate EUR/USD relevance
@@ -60,6 +64,23 @@ EUR_USD_KEYWORDS = [
     "refinery", "oil production", "oil glut", "oil shortage",
 ]
 
+EUR_USD_KEYWORDS.extend([
+    # --- US Equities & Risk Appetite ---
+    "sp500", "s&p 500", "dow jones", "nasdaq", "us stocks", "equities", "stock market",
+    "wall street", "risk-on", "risk off", "risk appetite", "u.s. stocks", "futures",
+
+    # --- Dollar Index ---
+    "dxy", "us dollar index", "dollar index", "usdx",
+
+    # --- Geopolitical Risk (general) ---
+    "geopolitical risk", "geopolitical tensions", "safe haven", "flight to safety",
+    "political crisis", "sanctions", "trade war", "military conflict", "instability",
+])
+
+
+
+
+
 # Sentiment keywords — used to score headlines without ML library
 BULLISH_EUR = ["hawkish ecb", "rate hike ecb", "strong euro", "weak dollar",
                "eur rises", "euro gains", "eur up", "bullish euro",
@@ -74,6 +95,24 @@ BULLISH_EUR = ["hawkish ecb", "rate hike ecb", "strong euro", "weak dollar",
                "oil shortage", "oil prices spike", "oil output cut", "opec cuts",
                "oil demand strong", "oil prices hit high", "energy inflation"
                ]
+               
+
+BULLISH_EUR.extend([
+    # US equities down → risk-off → USD weakens (EUR/USD up)
+    "sp500 down", "dow falls", "nasdaq crash", "stocks plunge", "equity selloff",
+    "wall street lower", "risk-off", "fear in markets",
+
+    # Dollar Index down → USD weak
+    "dxy down", "dollar index falls", "usd index drops",
+
+    # Geopolitical risk (US‑centric) → USD weakens
+    "us political crisis", "us instability", "us government shutdown", "us debt ceiling",
+    "us sanctions backfire",
+
+    # Geopolitical risk (Europe‑specific) – may weaken EUR, but we are listing bullish for EUR? Actually, EUR bullish is opposite: EU stability, etc.
+    # But to avoid confusion, we'll keep geopolitical under bearish section below.
+])
+
 
 BEARISH_EUR = ["dovish ecb", "rate cut ecb", "weak euro", "strong dollar",
                "eur falls", "euro drops", "eur down", "bearish euro",
@@ -88,6 +127,66 @@ BEARISH_EUR = ["dovish ecb", "rate cut ecb", "weak euro", "strong dollar",
                "oil surplus", "oil price crash", "oil production high", "opec raises output",
                "oil demand weak", "energy prices drop", "oil stocks build"
                ]
+
+
+BEARISH_EUR.extend([
+    # US equities up → risk-on → USD strong
+    "sp500 high", "dow record", "nasdaq rally", "stocks surge", "equities boom",
+    "wall street higher", "risk-on", "optimism",
+
+    # Dollar Index up → USD strong
+    "dxy up", "dollar index rises", "usd index gains", "dxy rally",
+
+    # Geopolitical risk (Europe‑centric) → EUR weak
+    "eurozone political crisis", "eu instability", "german political crisis", "french unrest",
+    "italian debt crisis", "european sanctions", "eu energy crisis", "ukraine war escalation",
+    "geopolitical tensions in europe",
+
+    # Global geopolitical risk → safe‑haven USD strong (EUR/USD down)
+    "middle east conflict", "global tensions", "war risk", "safe haven flows",
+    "flight to safety", "geopolitical uncertainty",
+])
+
+
+# ── NEW: Multi-dimensional keyword sets ───────────────────────────
+
+# 1. ENTITY IDENTIFIERS (HIGH WEIGHT)
+USD_TERMS = [
+    "usd", "us dollar", "dollar", "dxy", "usdx",
+    "federal reserve", "fed", "powell", "treasury", "us economy",
+    "wall street", "us yields", "us bonds"
+]
+
+EUR_TERMS = [
+    "eur", "euro", "eurusd", "eur/usd", "eurozone",
+    "ecb", "lagarde", "germany", "france", "italy",
+    "spain", "euro area", "bund", "european central bank"
+]
+
+# 2. ECONOMIC CONTEXT (MEDIUM WEIGHT)
+ECON_TERMS = [
+    "interest rate", "rates", "inflation", "cpi", "ppi",
+    "gdp", "growth", "recession", "employment", "payroll",
+    "nonfarm", "nfp", "jobless claims", "unemployment",
+    "retail sales", "industrial production", "pmi",
+    "consumer confidence", "housing", "yields", "bonds"
+]
+
+# 3. DIRECTION / SENTIMENT (STRONG SIGNAL)
+POSITIVE_TERMS = [
+    "rise", "rises", "gain", "gains", "up", "higher",
+    "strong", "beat", "exceed", "surge", "rally",
+    "hawkish", "tightening", "growth", "optimism"
+]
+
+NEGATIVE_TERMS = [
+    "fall", "falls", "drop", "drops", "down", "lower",
+    "weak", "miss", "below", "plunge", "slump",
+    "dovish", "cut", "easing", "recession", "fear"
+]
+
+
+
                
 SYMBOLS        = ["EURUSD"]  # unified display — actual source decided at runtime
 
@@ -971,11 +1070,96 @@ def simple_sentiment(text):
     elif score <= -0.15: label = "slightly bearish"
     else:               label = "neutral"
     return {"score": round(score, 2), "label": label}
+    
+    
+def advanced_sentiment(text):
+    """
+    Multi-dimensional EUR/USD sentiment scoring.
+    Returns score (-1 to +1) and label.
+    """
+
+    text_l = text.lower()
+
+    usd_score = 0
+    eur_score = 0
+    econ_score = 0
+    direction = 0
+
+    # ── ENTITY SCORING (WHO is affected) ──
+    for kw in USD_TERMS:
+        if kw in text_l:
+            usd_score += 1
+
+    for kw in EUR_TERMS:
+        if kw in text_l:
+            eur_score += 1
+
+    # ── ECONOMIC CONTEXT ──
+    for kw in ECON_TERMS:
+        if kw in text_l:
+            econ_score += 1
+
+    # ── DIRECTION ──
+    for kw in POSITIVE_TERMS:
+        if kw in text_l:
+            direction += 1
+
+    for kw in NEGATIVE_TERMS:
+        if kw in text_l:
+            direction -= 1
+
+    # ── LOGIC: Translate into EURUSD bias ──
+
+    score = 0.0
+
+    # USD strength → EURUSD down
+    if usd_score > eur_score:
+        score -= 0.3 * usd_score
+
+    # EUR strength → EURUSD up
+    if eur_score > usd_score:
+        score += 0.3 * eur_score
+
+    # Direction amplifies
+    score += 0.2 * direction
+
+    # Economic context adds confidence
+    score += 0.1 * econ_score
+
+    # Clamp
+    score = max(-1.0, min(1.0, score))
+
+    # Label
+    if score >= 0.4:
+        label = "bullish"
+    elif score >= 0.15:
+        label = "slightly bullish"
+    elif score <= -0.4:
+        label = "bearish"
+    elif score <= -0.15:
+        label = "slightly bearish"
+    else:
+        label = "neutral"
+
+    return {
+        "score": round(score, 3),
+        "label": label,
+        "components": {
+            "usd": usd_score,
+            "eur": eur_score,
+            "econ": econ_score,
+            "direction": direction
+        }
+    }
+
+
 
 def is_relevant(text):
     """True if headline/description mentions EUR/USD relevant topics."""
     text_l = text.lower()
     return any(kw in text_l for kw in EUR_USD_KEYWORDS)
+    
+    
 
 def parse_rss(url, source_name, timeout=8):
     """Parse an RSS feed and return list of article dicts."""
@@ -1001,7 +1185,8 @@ def parse_rss(url, source_name, timeout=8):
             full_text = title + " " + desc
             if not is_relevant(full_text):
                 continue
-            sentiment = simple_sentiment(full_text)
+            #sentiment = simple_sentiment(full_text)
+            sentiment = advanced_sentiment(full_text)
             articles.append({
                 "title":     title,
                 "desc":      desc,
@@ -1034,7 +1219,8 @@ def fetch_newsapi(query, max_articles=10):
             full  = title + " " + desc
             if not is_relevant(full):
                 continue
-            sentiment = simple_sentiment(full)
+            #sentiment = simple_sentiment(full)
+            sentiment = advanced_sentiment(full_text)
             articles.append({
                 "title":     title,
                 "desc":      desc,
