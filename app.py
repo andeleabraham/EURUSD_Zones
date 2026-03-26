@@ -1005,21 +1005,39 @@ def calc_fibonacci(h, l):
         },
     }
 
-def calc_murray_math(price):
+def calc_murray_math(high, low, price=None):
     """
-    Murray Math levels — 8 octave lines on a power-of-8 price grid.
-    For EUR/USD the natural grid is 0.125 (1/8 of 1.0).
+    Murray-style octave levels anchored to the active trading range.
+    This keeps the lines inside or near the current swing instead of
+    snapping EUR/USD to a static wide grid that can sit far from price.
     """
-    grid = 0.125  # EUR/USD octave size
-    base = round(price / grid) * grid
-    lines = {}
-    labels = ["0/8 — Major S", "1/8 — Weak S", "2/8 — S pivot",
-              "3/8 — Lower trading", "4/8 — Major pivot",
-              "5/8 — Upper trading", "6/8 — R pivot",
-              "7/8 — Weak R", "8/8 — Major R"]
-    for i in range(9):
-        lines[labels[i]] = round(base - grid + i * (grid/8), 5)
-    return {"grid": grid, "base": round(base, 5), "levels": lines}
+    if high <= low:
+        high = low + 0.0010
+
+    rng = high - low
+    octave = rng / 8.0
+    labels = [
+        "0/8 — Major S", "1/8 — Weak S", "2/8 — S pivot",
+        "3/8 — Lower trading", "4/8 — Major pivot",
+        "5/8 — Upper trading", "6/8 — R pivot",
+        "7/8 — Weak R", "8/8 — Major R"
+    ]
+    lines = {labels[i]: round(low + octave * i, 5) for i in range(9)}
+
+    extensions = {
+        "-1/8 — Oversold": round(low - octave, 5),
+        "9/8 — Overbought": round(high + octave, 5)
+    }
+
+    return {
+        "grid": round(octave, 5),
+        "base": round(low, 5),
+        "range_high": round(high, 5),
+        "range_low": round(low, 5),
+        "price": round(price, 5) if price is not None else None,
+        "levels": lines,
+        "extensions": extensions
+    }
 
 def calc_vwap(candles):
     """
@@ -1136,8 +1154,8 @@ def api_levels():
         fib_l    = min(c["l"] for c in recent)
         fibonacci = calc_fibonacci(fib_h, fib_l)
 
-        # Murray Math from current price
-        murray = calc_murray_math(price)
+        # Murray Math from recent trading range
+        murray = calc_murray_math(fib_h, fib_l, price)
 
         # VWAP — use all available candles for the session
         # For intraday TFs use up to 200 candles; for daily use 20
@@ -1173,6 +1191,10 @@ def api_levels():
 @app.route("/levels")
 def levels_page():
     return render_template("levels.html")
+
+@app.route("/trade-setups")
+def trade_setups_page():
+    return render_template("trade_setups.html")
 
 
 # ── News & sentiment helpers ──────────────────────────────────────
