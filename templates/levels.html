@@ -87,6 +87,7 @@
   <span>EUR/USD</span>
   <span class="cur" id="cur-px">-</span>
   <span>TF: <b id="tf-lbl">Daily</b></span>
+  <span>RSI(14): <b id="rsi-val">-</b> <b id="rsi-state">-</b></span>
   <span>Prev candle H:<b id="pc-h">-</b> L:<b id="pc-l">-</b> C:<b id="pc-c">-</b></span>
   <span>Murray range:<b id="murray-range">-</b></span>
   <span style="margin-left:auto">Source: <b id="src-lbl">-</b> · <b id="ts-lbl">-</b></span>
@@ -180,6 +181,8 @@ function render(d) {
   document.getElementById('cur-px').textContent = fmt(price,5);
   document.getElementById('cur-px').className = 'cur ' + (up ? 'up' : 'dn');
   document.getElementById('tf-lbl').textContent = d.tf_label;
+  document.getElementById('rsi-val').textContent = d.rsi && d.rsi.value != null ? fmt(d.rsi.value,2) : '-';
+  document.getElementById('rsi-state').textContent = d.rsi && d.rsi.state ? d.rsi.state.replaceAll('_',' ') : '-';
   document.getElementById('pc-h').textContent = fmt(d.prev_candle.h,5);
   document.getElementById('pc-l').textContent = fmt(d.prev_candle.l,5);
   document.getElementById('pc-c').textContent = fmt(d.prev_candle.c,5);

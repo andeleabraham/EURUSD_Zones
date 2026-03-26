@@ -67,6 +67,7 @@
       <div>Regular setups require at least <b>10 pips</b>.</div>
       <div>Priority is given to setups in the <b>20-50 pip</b> zone.</div>
       <div>Bold setups are allowed into the <b>50-120+ pip</b> zone.</div>
+      <div>Daily <b>RSI(14)</b> can upgrade reversal setups near exhaustion zones.</div>
       <div>Buys must enter below their target. Sells must enter above their target.</div>
     </div>
   </div>
@@ -154,7 +155,21 @@ function getForecastDaily() {
   };
 }
 
-function scoreBuy(entry, target, bidWall, askWall, supports, resistances, currentPrice, forecast) {
+function getRsiContext() {
+  return levelsCtx && levelsCtx.rsi ? levelsCtx.rsi : null;
+}
+
+function rsiBiasLine(rsi) {
+  if (!rsi || rsi.value == null) return 'RSI context is unavailable.';
+  const val = Number(rsi.value);
+  if (val <= 30) return `RSI(14) is ${fmt(val,2)}, which is oversold and can support a bullish reversal from demand.`;
+  if (val <= 40) return `RSI(14) is ${fmt(val,2)}, showing bearish stretch that can help low-risk buy setups near support.`;
+  if (val >= 70) return `RSI(14) is ${fmt(val,2)}, which is overbought and supports bearish reversal ideas near supply.`;
+  if (val >= 60) return `RSI(14) is ${fmt(val,2)}, showing bullish stretch, so long setups need stronger entry discipline.`;
+  return `RSI(14) is ${fmt(val,2)}, a balanced reading that keeps confluence and forecast bias in control.`;
+}
+
+function scoreBuy(entry, target, bidWall, askWall, supports, resistances, currentPrice, forecast, rsi) {
   const pips = Math.round((target - entry) / 0.0001);
   if (!(entry < target) || pips < 10) return null;
   const confluence = supports.filter(x => Math.abs(x.value - entry) <= 0.0006);
@@ -167,6 +182,12 @@ function scoreBuy(entry, target, bidWall, askWall, supports, resistances, curren
   score += pips >= 20 && pips <= 50 ? 18 : pips > 50 ? 12 : 8;
   if (forecast.bias === 'Bullish') score += 12;
   if (forecast.bias === 'Bearish') score -= 10;
+  if (rsi && rsi.value != null) {
+    if (rsi.value <= 30) score += 16;
+    else if (rsi.value <= 40) score += 9;
+    else if (rsi.value >= 70) score -= 12;
+    else if (rsi.value >= 60) score -= 6;
+  }
   if (nearNow) score += 6;
   return {
     side: pips >= 50 ? 'bold-buy' : 'buy',
@@ -178,11 +199,12 @@ function scoreBuy(entry, target, bidWall, askWall, supports, resistances, curren
     confluence,
     sourceWall: bidWall,
     targetWall: askWall,
-    targetLevels: resistances.filter(x => Math.abs(x.value - target) <= 0.0008)
+    targetLevels: resistances.filter(x => Math.abs(x.value - target) <= 0.0008),
+    rsiNote: rsiBiasLine(rsi)
   };
 }
 
-function scoreSell(entry, target, askWall, bidWall, supports, resistances, currentPrice, forecast) {
+function scoreSell(entry, target, askWall, bidWall, supports, resistances, currentPrice, forecast, rsi) {
   const pips = Math.round((entry - target) / 0.0001);
   if (!(entry > target) || pips < 10) return null;
   const confluence = resistances.filter(x => Math.abs(x.value - entry) <= 0.0006);
@@ -195,6 +217,12 @@ function scoreSell(entry, target, askWall, bidWall, supports, resistances, curre
   score += pips >= 20 && pips <= 50 ? 18 : pips > 50 ? 12 : 8;
   if (forecast.bias === 'Bearish') score += 12;
   if (forecast.bias === 'Bullish') score -= 10;
+  if (rsi && rsi.value != null) {
+    if (rsi.value >= 70) score += 16;
+    else if (rsi.value >= 60) score += 9;
+    else if (rsi.value <= 30) score -= 12;
+    else if (rsi.value <= 40) score -= 6;
+  }
   if (nearNow) score += 6;
   return {
     side: pips >= 50 ? 'bold-sell' : 'sell',
@@ -206,7 +234,8 @@ function scoreSell(entry, target, askWall, bidWall, supports, resistances, curre
     confluence,
     sourceWall: askWall,
     targetWall: bidWall,
-    targetLevels: supports.filter(x => Math.abs(x.value - target) <= 0.0008)
+    targetLevels: supports.filter(x => Math.abs(x.value - target) <= 0.0008),
+    rsiNote: rsiBiasLine(rsi)
   };
 }
 
@@ -219,6 +248,7 @@ function buildSetups() {
   const bidWalls = (wallCtx.bid_walls || []).filter(w => w.qty > 0).sort((a,b) => a.price - b.price);
   const askWalls = (wallCtx.ask_walls || []).filter(w => w.qty > 0).sort((a,b) => a.price - b.price);
   const forecast = getForecastDaily();
+  const rsi = getRsiContext();
   const setups = [];
 
   bidWalls.forEach(bidWall => {
@@ -236,7 +266,7 @@ function buildSetups() {
       return pips >= 10 && pips <= 120;
     });
     if (!targetPick) return;
-    const setup = scoreBuy(entry, targetPick.value, bidWall, targetPick.askWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast);
+    const setup = scoreBuy(entry, targetPick.value, bidWall, targetPick.askWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast, rsi);
     if (setup) setups.push(setup);
   });
 
@@ -255,7 +285,7 @@ function buildSetups() {
       return pips >= 10 && pips <= 120;
     });
     if (!targetPick) return;
-    const setup = scoreSell(entry, targetPick.value, askWall, targetPick.bidWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast);
+    const setup = scoreSell(entry, targetPick.value, askWall, targetPick.bidWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast, rsi);
     if (setup) setups.push(setup);
   });
 
@@ -271,9 +301,11 @@ function buildSetups() {
 function renderContext() {
   const currentPrice = priceCtx ? (priceCtx.bid + priceCtx.ask) / 2 : null;
   const forecast = getForecastDaily();
+  const rsi = getRsiContext();
   document.getElementById('market-summary').innerHTML = priceCtx ? `
     <div>Current EUR/USD price is <b>${fmt(currentPrice,5)}</b> with day trend marked as <b>${priceCtx.trend}</b>.</div>
     <div>Spread is <b>${fmt(priceCtx.spread,5)}</b>, day range is <b>${priceCtx.day_range_pips} pips</b>, and price sits <b>${priceCtx.range_position}%</b> through today's range.</div>
+    <div>${rsiBiasLine(rsi)}</div>
     <div>The setup engine favors pullback buys in bullish conditions and rally sells in bearish conditions, but still requires valid liquidity-to-target distance.</div>
   ` : 'Price context unavailable.';
 
@@ -307,6 +339,7 @@ function renderSetups() {
       <div class="logic">
         <div><b>Liquidity entry:</b> ${fmt(s.sourceWall.price,4)} using ${Math.round(s.sourceWall.qty)} units of visible liquidity.</div>
         <div><b>Target zone:</b> ${fmt(s.target,4)}${s.targetWall && s.targetWall.qty ? ` with ${Math.round(s.targetWall.qty)} units on the opposite side.` : ' from technical resistance/support.'}</div>
+        <div><b>RSI context:</b> ${s.rsiNote}</div>
         <div><b>Technical confluence:</b> ${s.confluence.length ? s.confluence.map(c => `${c.name} (${c.family})`).join(', ') : 'none nearby'}</div>
         <div><b>Target confluence:</b> ${s.targetLevels.length ? s.targetLevels.map(c => `${c.name} (${c.family})`).join(', ') : 'liquidity-led target'}</div>
       </div>

@@ -1081,6 +1081,58 @@ def calc_vwap(candles):
         "std":     round(std, 5),
     }
 
+def calc_rsi(candles, period=14):
+    """
+    RSI from candle close values.
+    Returns value and a simple state label for quick UI use.
+    """
+    if not candles or len(candles) <= period:
+        return None
+
+    closes = [float(c["c"]) for c in candles if c.get("c") is not None]
+    if len(closes) <= period:
+        return None
+
+    changes = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    gains = [max(ch, 0.0) for ch in changes]
+    losses = [abs(min(ch, 0.0)) for ch in changes]
+
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+
+    for idx in range(period, len(gains)):
+        avg_gain = ((avg_gain * (period - 1)) + gains[idx]) / period
+        avg_loss = ((avg_loss * (period - 1)) + losses[idx]) / period
+
+    if avg_loss == 0:
+        rsi = 100.0
+    else:
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+
+    if rsi >= 70:
+        state = "overbought"
+        bias = "bearish_reversal_watch"
+    elif rsi >= 60:
+        state = "bullish_but_stretched"
+        bias = "bullish"
+    elif rsi <= 30:
+        state = "oversold"
+        bias = "bullish_reversal_watch"
+    elif rsi <= 40:
+        state = "bearish_but_stretched"
+        bias = "bearish"
+    else:
+        state = "balanced"
+        bias = "neutral"
+
+    return {
+        "period": period,
+        "value": round(rsi, 2),
+        "state": state,
+        "bias_hint": bias,
+    }
+
 def get_kraken_ohlc(interval_min, limit=2):
     """
     Fetch OHLC from Kraken. Returns list of candle dicts.
@@ -1171,6 +1223,7 @@ def api_levels():
         # For intraday TFs use up to 200 candles; for daily use 20
         vwap_candles = candles_all[-200:] if interval_min < 1440 else candles_all[-20:]
         vwap = calc_vwap(vwap_candles)
+        rsi = calc_rsi(candles_all[-250:] if len(candles_all) > 250 else candles_all, period=14)
 
         # Round all levels to 5dp for clean display
         def rnd(d):
@@ -1189,6 +1242,7 @@ def api_levels():
             "fibonacci":   fibonacci,
             "murray":      murray,
             "vwap":        vwap,
+            "rsi":         rsi,
             "source":      ticker.get("source"),
             "ts":          now_utc(),
         }
