@@ -151,38 +151,48 @@ BEARISH_EUR.extend([
 # ── NEW: Multi-dimensional keyword sets ───────────────────────────
 
 # 1. ENTITY IDENTIFIERS (HIGH WEIGHT)
-USD_TERMS = [
-    "usd", "us dollar", "dollar", "dxy", "usdx",
-    "federal reserve", "fed", "powell", "treasury", "us economy",
-    "wall street", "us yields", "us bonds"
-]
+ACTOR_TERMS = {
+    "usd": [
+        "usd", "us dollar", "dollar", "greenback", "dxy", "usdx",
+        "federal reserve", "fed", "powell", "treasury", "us economy",
+        "u.s. economy", "wall street", "us yields", "us bonds", "treasuries",
+        "fomc", "united states", "america", "u.s."
+    ],
+    "eur": [
+        "eur", "euro", "eurusd", "eur/usd", "eurozone",
+        "ecb", "lagarde", "germany", "france", "italy",
+        "spain", "euro area", "bund", "european central bank", "eu", "european union"
+    ]
+}
 
-EUR_TERMS = [
-    "eur", "euro", "eurusd", "eur/usd", "eurozone",
-    "ecb", "lagarde", "germany", "france", "italy",
-    "spain", "euro area", "bund", "european central bank"
-]
-
-# 2. ECONOMIC CONTEXT (MEDIUM WEIGHT)
-ECON_TERMS = [
-    "interest rate", "rates", "inflation", "cpi", "ppi",
-    "gdp", "growth", "recession", "employment", "payroll",
-    "nonfarm", "nfp", "jobless claims", "unemployment",
-    "retail sales", "industrial production", "pmi",
-    "consumer confidence", "housing", "yields", "bonds"
-]
+# 2. ECONOMIC CONTEXT (MEDIUM/HIGH WEIGHT)
+ASPECT_PATTERNS = {
+    "interest_rates": {"weight": 1.35, "tier": "high", "terms": ["interest rate", "rates", "rate cut", "rate hike", "monetary policy", "tightening", "easing", "hawkish", "dovish", "deposit rate", "fed funds", "taper", "qt", "qe"]},
+    "inflation": {"weight": 1.20, "tier": "high", "terms": ["inflation", "cpi", "ppi", "pce", "core pce", "price pressures", "disinflation"]},
+    "labor": {"weight": 1.15, "tier": "high", "terms": ["employment", "jobs", "jobless claims", "unemployment", "nonfarm", "nfp", "payroll", "labor market", "wages", "wage growth"]},
+    "growth": {"weight": 1.00, "tier": "medium", "terms": ["gdp", "growth", "recession", "economic activity", "industrial production", "manufacturing", "services", "business activity"]},
+    "surveys": {"weight": 0.90, "tier": "medium", "terms": ["pmi", "consumer confidence", "sentiment", "ifo", "zew", "survey", "business climate"]},
+    "consumer": {"weight": 0.85, "tier": "medium", "terms": ["retail sales", "spending", "consumption", "housing", "housing starts", "home sales"]},
+    "yields_bonds": {"weight": 1.05, "tier": "high", "terms": ["yield", "yields", "bond", "bonds", "treasury", "bund", "auction", "curve", "spread"]},
+    "equities_risk": {"weight": 0.80, "tier": "medium", "terms": ["sp500", "s&p 500", "dow jones", "nasdaq", "stocks", "equities", "risk-on", "risk off", "risk appetite", "futures"]},
+    "energy_trade": {"weight": 0.75, "tier": "medium", "terms": ["oil", "crude", "wti", "brent", "eia", "inventory", "opec", "gasoline", "trade balance", "current account"]},
+    "politics_geopolitics": {"weight": 0.70, "tier": "medium", "terms": ["election", "politics", "sanctions", "trade war", "geopolitical", "conflict", "war", "instability", "safe haven", "flight to safety"]},
+    "fx_dxy": {"weight": 1.00, "tier": "high", "terms": ["dxy", "us dollar index", "dollar index", "eurusd", "eur/usd", "fx", "forex", "currency"]}
+}
 
 # 3. DIRECTION / SENTIMENT (STRONG SIGNAL)
 POSITIVE_TERMS = [
-    "rise", "rises", "gain", "gains", "up", "higher",
-    "strong", "beat", "exceed", "surge", "rally",
-    "hawkish", "tightening", "growth", "optimism"
+    "rise", "rises", "rising", "gain", "gains", "gained", "up", "higher", "hotter",
+    "strong", "stronger", "beat", "beats", "exceed", "exceeds", "surge", "surges",
+    "rally", "rallies", "hawkish", "tightening", "growth", "optimism", "improve",
+    "improves", "expands", "expansion", "accelerates", "resilient"
 ]
 
 NEGATIVE_TERMS = [
-    "fall", "falls", "drop", "drops", "down", "lower",
-    "weak", "miss", "below", "plunge", "slump",
-    "dovish", "cut", "easing", "recession", "fear"
+    "fall", "falls", "falling", "drop", "drops", "dropped", "down", "lower", "cooler",
+    "weak", "weaker", "miss", "misses", "below", "plunge", "slump", "dovish", "cut",
+    "cuts", "easing", "recession", "fear", "contract", "contracts", "slowdown",
+    "softens", "decline", "declines"
 ]
 
 
@@ -1316,6 +1326,107 @@ def is_relevant(text):
     """True if headline/description mentions EUR/USD relevant topics."""
     text_l = text.lower()
     return any(kw in text_l for kw in EUR_USD_KEYWORDS)
+
+
+def advanced_sentiment_v2(text):
+    """
+    Structured EUR/USD sentiment scoring:
+    1. Who is affected: EUR or USD
+    2. What economic aspect is affected
+    3. Which direction the article implies
+    Then translate that relationship into EUR/USD impact.
+    """
+    text_l = text.lower()
+
+    actor_hits = {}
+    for actor, terms in ACTOR_TERMS.items():
+        hits = [kw for kw in terms if kw in text_l]
+        if hits:
+            actor_hits[actor] = hits
+
+    aspect_hits = {}
+    for aspect, cfg in ASPECT_PATTERNS.items():
+        hits = [kw for kw in cfg["terms"] if kw in text_l]
+        if hits:
+            aspect_hits[aspect] = {
+                "hits": hits,
+                "weight": cfg["weight"],
+                "tier": cfg["tier"]
+            }
+
+    positive_hits = [kw for kw in POSITIVE_TERMS if kw in text_l]
+    negative_hits = [kw for kw in NEGATIVE_TERMS if kw in text_l]
+    direction_score = len(positive_hits) - len(negative_hits)
+    direction_label = "positive" if direction_score > 0 else "negative" if direction_score < 0 else "neutral"
+
+    actor_strength = {k: len(v) for k, v in actor_hits.items()}
+    dominant_actor = max(actor_strength.items(), key=lambda x: x[1])[0] if actor_strength else None
+    aspect_weight_total = sum(v["weight"] for v in aspect_hits.values())
+    dominant_aspect = max(aspect_hits.items(), key=lambda x: x[1]["weight"])[0] if aspect_hits else None
+    direction_magnitude = min(1.5, 0.35 + 0.18 * max(len(positive_hits), len(negative_hits))) if direction_score != 0 else 0.0
+
+    score = 0.0
+    actor_effects = []
+    for actor, strength in actor_strength.items():
+        actor_weight = min(1.4, 0.35 + 0.18 * strength)
+        base_move = actor_weight * (direction_magnitude or 0.20)
+        if actor == "usd":
+            actor_move = -base_move if direction_score > 0 else base_move if direction_score < 0 else 0.0
+        else:
+            actor_move = base_move if direction_score > 0 else -base_move if direction_score < 0 else 0.0
+        score += actor_move
+        actor_effects.append({
+            "actor": actor,
+            "mentions": strength,
+            "effect_on_eurusd": round(actor_move, 3)
+        })
+
+    if score != 0 and aspect_weight_total > 0:
+        score *= min(1.7, 0.75 + 0.22 * aspect_weight_total)
+
+    score = max(-1.0, min(1.0, score))
+    if score >= 0.4:
+        label = "bullish"
+        eurusd_effect = "bullish"
+    elif score >= 0.15:
+        label = "slightly bullish"
+        eurusd_effect = "bullish"
+    elif score <= -0.4:
+        label = "bearish"
+        eurusd_effect = "bearish"
+    elif score <= -0.15:
+        label = "slightly bearish"
+        eurusd_effect = "bearish"
+    else:
+        label = "neutral"
+        eurusd_effect = "neutral"
+
+    return {
+        "score": round(score, 3),
+        "label": label,
+        "eurusd_effect": eurusd_effect,
+        "who": {
+            "dominant_actor": dominant_actor,
+            "actors": {k: {"count": len(v), "matches": v[:6]} for k, v in actor_hits.items()}
+        },
+        "what": {
+            "dominant_aspect": dominant_aspect,
+            "aspects": {k: {"tier": v["tier"], "weight": v["weight"], "matches": v["hits"][:6]} for k, v in aspect_hits.items()}
+        },
+        "direction": {
+            "label": direction_label,
+            "score": direction_score,
+            "positive_terms": positive_hits[:8],
+            "negative_terms": negative_hits[:8]
+        },
+        "actor_effects": actor_effects,
+        "components": {
+            "usd": actor_strength.get("usd", 0),
+            "eur": actor_strength.get("eur", 0),
+            "aspects": len(aspect_hits),
+            "direction": direction_score
+        }
+    }
     
     
 
@@ -1343,8 +1454,7 @@ def parse_rss(url, source_name, timeout=8):
             full_text = title + " " + desc
             if not is_relevant(full_text):
                 continue
-            #sentiment = simple_sentiment(full_text)
-            sentiment = advanced_sentiment(full_text)
+            sentiment = advanced_sentiment_v2(full_text)
             articles.append({
                 "title":     title,
                 "desc":      desc,
@@ -1377,8 +1487,7 @@ def fetch_newsapi(query, max_articles=10):
             full  = title + " " + desc
             if not is_relevant(full):
                 continue
-            #sentiment = simple_sentiment(full)
-            sentiment = advanced_sentiment(full_text)
+            sentiment = advanced_sentiment_v2(full)
             articles.append({
                 "title":     title,
                 "desc":      desc,

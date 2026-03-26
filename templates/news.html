@@ -55,6 +55,16 @@
 .art-desc{font-size:.75rem;color:var(--muted);line-height:1.5;margin-bottom:.4rem}
 .art-meta{display:flex;align-items:center;gap:.7rem;font-size:.65rem;color:var(--faint);font-family:'DM Mono',monospace}
 .art-src{color:var(--acc2)}
+.tag-row{display:flex;gap:.35rem;flex-wrap:wrap;margin:.45rem 0}
+.tag{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:.58rem;font-family:'DM Mono',monospace;border:1px solid var(--border2);color:var(--muted)}
+.tag.actor-usd{color:#60a5fa;border-color:#60a5fa40;background:#0d1a2a}
+.tag.actor-eur{color:#fbbf24;border-color:#fbbf2440;background:#1a1000}
+.tag.effect-bullish{color:var(--bid);border-color:#22c55e40;background:#0d2018}
+.tag.effect-bearish{color:var(--ask);border-color:#ef444440;background:#200d0d}
+.tag.effect-neutral{color:var(--warn);border-color:#f59e0b40;background:#161000}
+.tag.aspect-high{color:#fca5a5;border-color:#fca5a540;background:#220c0c}
+.tag.aspect-medium{color:#fde68a;border-color:#fde68a40;background:#1d1705}
+.tag.aspect-low{color:var(--muted)}
 .sent-bar{height:3px;border-radius:2px;margin-top:.4rem;transition:width .3s}
 
 /* Economic calendar */
@@ -256,6 +266,17 @@ function renderFeed() {
     const cls  = sentClass(s.label);
     const col  = sentColor(s.score);
     const barW = Math.abs(s.score) * 100;
+    const who = s.who || {};
+    const what = s.what || {};
+    const direction = s.direction || {};
+    const dominantActor = who.dominant_actor || null;
+    const dominantAspect = what.dominant_aspect || null;
+    const dominantAspectMeta = dominantAspect ? what.aspects?.[dominantAspect] : null;
+    const effect = s.eurusd_effect || 'neutral';
+    const actorTag = dominantActor ? `<span class="tag actor-${dominantActor}">${dominantActor.toUpperCase()} affected</span>` : '';
+    const aspectTag = dominantAspect ? `<span class="tag aspect-${dominantAspectMeta?.tier || 'low'}">${dominantAspect.replaceAll('_',' ')}</span>` : '';
+    const directionTag = direction.label && direction.label !== 'neutral' ? `<span class="tag">${direction.label}</span>` : '';
+    const effectTag = `<span class="tag effect-${effect}">EURUSD ${effect}</span>`;
     return `<div class="article">
       <div class="art-hdr">
         <div class="art-title">
@@ -264,6 +285,7 @@ function renderFeed() {
         <span class="sent-badge ${cls}">${s.label}</span>
       </div>
       ${a.desc ? `<div class="art-desc">${a.desc}</div>` : ''}
+      <div class="tag-row">${actorTag}${aspectTag}${directionTag}${effectTag}</div>
       <div class="art-meta">
         <span class="art-src">${a.source}</span>
         <span>${a.published || ''}</span>
