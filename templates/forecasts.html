@@ -44,6 +44,7 @@ td{color:var(--text)}
 {% set sessions = payload.get('session_forecasts', []) %}
 {% set session_defs = payload.get('session_definitions', []) %}
 {% set session_transition_summary = payload.get('session_transition_summary', []) %}
+{% set session_transition_regimes = payload.get('session_transition_regimes', []) %}
 {% set calendar_variants = payload.get('calendar_variants', []) %}
 {% set models = payload.get('simulation_models', []) %}
 {% set dxy = payload.get('dxy_context', {}) %}
@@ -270,6 +271,42 @@ td{color:var(--text)}
       <div class="empty">No session handoff data was pushed with this report.</div>
       {% endif %}
     </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-lbl">Regime-Aware Session Handoffs</div>
+    {% if session_transition_regimes %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Regime</th>
+            <th>Follow Rate</th>
+            <th>Reached Prior High</th>
+            <th>Reached Prior Low</th>
+            <th>Broke Prior High</th>
+            <th>Broke Prior Low</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in session_transition_regimes %}
+          <tr>
+            <td>{{ row.get('session', 'N/A') }}</td>
+            <td>{{ row.get('regime', 'N/A') }}</td>
+            <td>{{ row.get('follow_rate', 'N/A') }}</td>
+            <td>{{ row.get('reached_prior_high', 'N/A') }}</td>
+            <td>{{ row.get('reached_prior_low', 'N/A') }}</td>
+            <td>{{ row.get('broke_prior_high', 'N/A') }}</td>
+            <td>{{ row.get('broke_prior_low', 'N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">No regime-aware handoff data was pushed with this report.</div>
+    {% endif %}
   </div>
 
   <div class="hero-grid">
