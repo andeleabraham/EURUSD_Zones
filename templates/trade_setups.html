@@ -16,7 +16,6 @@
 .bias-pill.bullish{color:var(--bid);border-color:#22c55e60;background:#22c55e12}
 .bias-pill.bearish{color:var(--ask);border-color:#ef444460;background:#ef444412}
 .bias-pill.neutral{color:var(--warn);border-color:#f59e0b60;background:#f59e0b12}
-.value{font-size:1.08rem;color:#fff;font-family:'DM Mono',monospace}
 .small{font-size:.7rem;color:var(--muted)}
 .setup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media(max-width:980px){.context-grid,.setup-grid{grid-template-columns:1fr}}
@@ -47,7 +46,7 @@
 <div class="page-hdr">
   <div>
     <div class="page-title">Trade setups</div>
-    <div class="page-sub">Liquidity walls, technical levels, and the latest daily forecast are combined to rank EUR/USD long and short ideas.</div>
+    <div class="page-sub">Liquidity, persistent bands, multi-timeframe RSI, and short-horizon candle confirmation are combined to rank EUR/USD long and short ideas.</div>
   </div>
   <button class="btn btn-green" onclick="init()">Refresh</button>
 </div>
@@ -65,10 +64,10 @@
     <div class="sec-lbl">Selection Rules</div>
     <div class="hint-list small">
       <div>Regular setups require at least <b>10 pips</b>.</div>
-      <div>Priority is given to setups in the <b>20-50 pip</b> zone.</div>
-      <div>Bold setups are allowed into the <b>50-120+ pip</b> zone.</div>
-      <div>Daily <b>RSI(14)</b> can upgrade reversal setups near exhaustion zones.</div>
-      <div>Buys must enter below their target. Sells must enter above their target.</div>
+      <div>Liquidity inside <b>10 pips</b> of price is ignored as settlement noise.</div>
+      <div>Limit entries are only shown when price can still realistically travel into that region.</div>
+      <div>15m, H1, and H4 <b>RSI</b> must support the direction.</div>
+      <div>15m <b>Heikin Ashi</b> is used as confirmation for now-type entries.</div>
     </div>
   </div>
 </div>
@@ -82,27 +81,42 @@
 <script>
 let priceCtx = null;
 let wallCtx = null;
-let levelsCtx = null;
 let forecastCtx = null;
+let levelsByTf = {};
+let candles15m = [];
+let persistentCtx = null;
 
 function fmt(n,d){ return n!=null && !isNaN(n) ? parseFloat(n).toFixed(d ?? 4) : '-'; }
 function pipValueUsd(pips, lot){ return (Math.abs(pips) * 0.10 * (lot / 0.01)).toFixed(2); }
+function toPips(diff){ return Math.round(diff / 0.0001); }
 function biasPill(bias){
   const cls = (bias || 'neutral').toLowerCase();
   return `<span class="bias-pill ${cls}">${bias || 'N/A'}</span>`;
 }
 
 async function loadAll() {
-  const [priceRes, wallsRes, levelsRes, forecastRes] = await Promise.allSettled([
+  const [priceRes, wallsRes, d1Res, m15Res, h1Res, h4Res, candlesRes, persistentRes, forecastRes] = await Promise.allSettled([
     fetch('/api/price').then(r => r.json()),
-    fetch('/api/nearest_walls?top_by_vol=30&n=8&min_gap=0.0003').then(r => r.json()),
+    fetch('/api/nearest_walls?top_by_vol=40&n=10&min_gap=0.0010').then(r => r.json()),
     fetch('/api/levels?tf=d1').then(r => r.json()),
+    fetch('/api/levels?tf=15m').then(r => r.json()),
+    fetch('/api/levels?tf=h1').then(r => r.json()),
+    fetch('/api/levels?tf=h4').then(r => r.json()),
+    fetch('/api/candles?interval=15m&limit=80').then(r => r.json()),
+    fetch('/api/liquidity/persistent?min_pips=10&max_pips=150&limit=10').then(r => r.json()),
     fetch('/api/forecasts/latest').then(async r => r.ok ? r.json() : {report:null})
   ]);
 
   priceCtx = priceRes.status === 'fulfilled' ? (priceRes.value.tickers || [])[0] : null;
   wallCtx = wallsRes.status === 'fulfilled' ? wallsRes.value : null;
-  levelsCtx = levelsRes.status === 'fulfilled' ? levelsRes.value : null;
+  levelsByTf = {
+    d1: d1Res.status === 'fulfilled' ? d1Res.value : null,
+    '15m': m15Res.status === 'fulfilled' ? m15Res.value : null,
+    h1: h1Res.status === 'fulfilled' ? h1Res.value : null,
+    h4: h4Res.status === 'fulfilled' ? h4Res.value : null
+  };
+  candles15m = candlesRes.status === 'fulfilled' && Array.isArray(candlesRes.value) ? candlesRes.value : [];
+  persistentCtx = persistentRes.status === 'fulfilled' ? persistentRes.value : null;
   forecastCtx = forecastRes.status === 'fulfilled' ? forecastRes.value.report : null;
 }
 
@@ -112,7 +126,6 @@ function collectTechnicalLevels(levels, price) {
     if (value == null || isNaN(value)) return;
     out.push({name, value, kind, family, pips: Math.round((value - price) / 0.0001)});
   };
-
   if (!levels) return out;
   if (levels.classic) {
     add('Classic PP', levels.classic.pp, 'pivot', 'classic');
@@ -128,185 +141,319 @@ function collectTechnicalLevels(levels, price) {
     ['r1','r2','r3'].forEach(k => add('W' + k.toUpperCase(), levels.woodie[k], 'resistance', 'woodie'));
     ['s1','s2','s3'].forEach(k => add('W' + k.toUpperCase(), levels.woodie[k], 'support', 'woodie'));
   }
-  if (levels.fibonacci && levels.fibonacci.retracements) {
+  if (levels.fibonacci?.retracements) {
     Object.entries(levels.fibonacci.retracements).forEach(([k,v]) => add('Fib ' + k, v, v > price ? 'resistance' : 'support', 'fibonacci'));
   }
   if (levels.vwap) {
     add('VWAP', levels.vwap.vwap, 'pivot', 'vwap');
-    add('VWAP +1σ', levels.vwap.upper_1, 'resistance', 'vwap');
-    add('VWAP +2σ', levels.vwap.upper_2, 'resistance', 'vwap');
-    add('VWAP -1σ', levels.vwap.lower_1, 'support', 'vwap');
-    add('VWAP -2σ', levels.vwap.lower_2, 'support', 'vwap');
+    add('VWAP +1s', levels.vwap.upper_1, 'resistance', 'vwap');
+    add('VWAP +2s', levels.vwap.upper_2, 'resistance', 'vwap');
+    add('VWAP -1s', levels.vwap.lower_1, 'support', 'vwap');
+    add('VWAP -2s', levels.vwap.lower_2, 'support', 'vwap');
   }
-  if (levels.murray && levels.murray.levels) {
-    Object.entries(levels.murray.levels).forEach(([k,v]) => add(k.split('—')[0].trim(), v, v > price ? 'resistance' : 'support', 'murray'));
+  if (levels.murray?.levels) {
+    Object.entries(levels.murray.levels).forEach(([k,v]) => add(k.split('â€”')[0].trim(), v, v > price ? 'resistance' : 'support', 'murray'));
   }
   return out;
 }
 
 function getForecastDaily() {
-  const payload = forecastCtx && forecastCtx.payload ? forecastCtx.payload : null;
-  const horizon = payload && payload.horizon_summaries ? payload.horizon_summaries.daily : null;
+  const payload = forecastCtx?.payload || null;
+  const horizon = payload?.horizon_summaries?.daily || null;
   return {
-    bias: horizon && horizon.bias ? horizon.bias : 'Neutral',
-    low: horizon && horizon.projected_low ? parseFloat(horizon.projected_low) : null,
-    high: horizon && horizon.projected_high ? parseFloat(horizon.projected_high) : null,
-    mode: payload && payload.forecast_mode ? payload.forecast_mode : 'price_only'
+    bias: horizon?.bias || 'Neutral',
+    low: horizon?.projected_low ? parseFloat(horizon.projected_low) : null,
+    high: horizon?.projected_high ? parseFloat(horizon.projected_high) : null,
+    mode: payload?.forecast_mode || 'price_only'
   };
 }
 
-function getRsiContext() {
-  return levelsCtx && levelsCtx.rsi ? levelsCtx.rsi : null;
+function getRsiPack() {
+  return {
+    m15: levelsByTf['15m']?.rsi || null,
+    h1: levelsByTf.h1?.rsi || null,
+    h4: levelsByTf.h4?.rsi || null,
+    d1: levelsByTf.d1?.rsi || null
+  };
 }
 
-function rsiBiasLine(rsi) {
-  if (!rsi || rsi.value == null) return 'RSI context is unavailable.';
-  const val = Number(rsi.value);
-  if (val <= 30) return `RSI(14) is ${fmt(val,2)}, which is oversold and can support a bullish reversal from demand.`;
-  if (val <= 40) return `RSI(14) is ${fmt(val,2)}, showing bearish stretch that can help low-risk buy setups near support.`;
-  if (val >= 70) return `RSI(14) is ${fmt(val,2)}, which is overbought and supports bearish reversal ideas near supply.`;
-  if (val >= 60) return `RSI(14) is ${fmt(val,2)}, showing bullish stretch, so long setups need stronger entry discipline.`;
-  return `RSI(14) is ${fmt(val,2)}, a balanced reading that keeps confluence and forecast bias in control.`;
+function getVwapPack() {
+  return {
+    m15: levelsByTf['15m']?.vwap || null,
+    h1: levelsByTf.h1?.vwap || null,
+    h4: levelsByTf.h4?.vwap || null
+  };
 }
 
-function scoreBuy(entry, target, bidWall, askWall, supports, resistances, currentPrice, forecast, rsi) {
-  const pips = Math.round((target - entry) / 0.0001);
-  if (!(entry < target) || pips < 10) return null;
-  const confluence = supports.filter(x => Math.abs(x.value - entry) <= 0.0006);
-  const nearNow = Math.abs(currentPrice - entry) / 0.0001 <= 4;
-  const waitPips = Math.round((currentPrice - entry) / 0.0001);
-  if (entry > currentPrice + 0.0001) return null;
-  let score = 0;
-  score += Math.min(35, Math.round((bidWall.qty / (wallCtx.all_top[0]?.qty || bidWall.qty)) * 35));
-  score += Math.min(18, confluence.length * 6);
-  score += pips >= 20 && pips <= 50 ? 18 : pips > 50 ? 12 : 8;
-  if (forecast.bias === 'Bullish') score += 12;
-  if (forecast.bias === 'Bearish') score -= 10;
-  if (rsi && rsi.value != null) {
-    if (rsi.value <= 30) score += 16;
-    else if (rsi.value <= 40) score += 9;
-    else if (rsi.value >= 70) score -= 12;
-    else if (rsi.value >= 60) score -= 6;
+function rsiPackLine(rsi) {
+  const parts = [];
+  [['15m', rsi.m15], ['H1', rsi.h1], ['H4', rsi.h4], ['D1', rsi.d1]].forEach(([label, row]) => {
+    if (row?.value != null) parts.push(`${label} ${fmt(row.value,1)} (${(row.state || 'n/a').replaceAll('_',' ')})`);
+  });
+  return parts.length ? parts.join(' · ') : 'RSI context unavailable.';
+}
+
+function computeHeikinAshi(candles) {
+  if (!candles || candles.length < 3) return null;
+  let prevHaOpen = (candles[0].o + candles[0].c) / 2;
+  let prevHaClose = (candles[0].o + candles[0].h + candles[0].l + candles[0].c) / 4;
+  const series = candles.map((c, idx) => {
+    const haClose = (c.o + c.h + c.l + c.c) / 4;
+    const haOpen = idx === 0 ? prevHaOpen : (prevHaOpen + prevHaClose) / 2;
+    const haHigh = Math.max(c.h, haOpen, haClose);
+    const haLow = Math.min(c.l, haOpen, haClose);
+    prevHaOpen = haOpen;
+    prevHaClose = haClose;
+    return {haOpen, haClose, haHigh, haLow};
+  });
+  const last = series[series.length - 1];
+  const prev = series[series.length - 2];
+  const bullish = last.haClose > last.haOpen;
+  const bearish = last.haClose < last.haOpen;
+  const body = Math.abs(last.haClose - last.haOpen);
+  const upperWick = last.haHigh - Math.max(last.haOpen, last.haClose);
+  const lowerWick = Math.min(last.haOpen, last.haClose) - last.haLow;
+  return {
+    direction: bullish ? 'bullish' : bearish ? 'bearish' : 'neutral',
+    reversalUp: bullish && prev.haClose <= prev.haOpen && lowerWick > body * 0.6,
+    reversalDown: bearish && prev.haClose >= prev.haOpen && upperWick > body * 0.6
+  };
+}
+
+function normalizeRegion(row, currentPrice, side, family) {
+  const price = Number(row.price ?? row.bucket_price);
+  const qty = Number(row.qty ?? row.max_qty ?? row.avg_qty ?? 0);
+  return {
+    price,
+    qty,
+    hits: Number(row.hits || 0),
+    side,
+    family,
+    pips: Math.abs(toPips(price - currentPrice))
+  };
+}
+
+function mergeLiquidity(currentPrice) {
+  const bids = [
+    ...((wallCtx?.bid_walls || []).map(row => normalizeRegion(row, currentPrice, 'bid', 'live_liquidity'))),
+    ...((persistentCtx?.bid_bands || []).map(row => normalizeRegion(row, currentPrice, 'bid', 'stored_liquidity')))
+  ];
+  const asks = [
+    ...((wallCtx?.ask_walls || []).map(row => normalizeRegion(row, currentPrice, 'ask', 'live_liquidity'))),
+    ...((persistentCtx?.ask_bands || []).map(row => normalizeRegion(row, currentPrice, 'ask', 'stored_liquidity')))
+  ];
+  const compress = (rows) => {
+    const out = [];
+    rows.sort((a,b) => a.price - b.price);
+    rows.forEach(row => {
+      if (row.pips < 10 || row.pips > 150) return;
+      const last = out[out.length - 1];
+      if (last && Math.abs(last.price - row.price) <= 0.0005) {
+        const lastStrength = last.qty + last.hits * 15;
+        const rowStrength = row.qty + row.hits * 15;
+        if (rowStrength > lastStrength) out[out.length - 1] = row;
+      } else {
+        out.push(row);
+      }
+    });
+    return out;
+  };
+  return {
+    bids: compress(bids).sort((a,b) => a.price - b.price),
+    asks: compress(asks).sort((a,b) => a.price - b.price)
+  };
+}
+
+function currentMomentum(rsiPack, ha) {
+  const r15 = rsiPack.m15?.value ?? 50;
+  const r1 = rsiPack.h1?.value ?? 50;
+  const r4 = rsiPack.h4?.value ?? 50;
+  return {
+    canBuyNow: !!ha && (ha.reversalUp || (ha.direction === 'bullish' && r15 >= 40 && r15 <= 62 && r1 <= 58)),
+    canSellNow: !!ha && (ha.reversalDown || (ha.direction === 'bearish' && r15 >= 38 && r15 <= 60 && r1 >= 42)),
+    canReachAsk: r15 < 65 && r1 < 62 && r4 < 68,
+    canReachBid: r15 > 35 && r1 > 38 && r4 > 32
+  };
+}
+
+function vwapRoomLine(vwapPack) {
+  const parts = [];
+  [['15m', vwapPack.m15], ['H1', vwapPack.h1], ['H4', vwapPack.h4]].forEach(([label, row]) => {
+    if (row?.band_width_1_pips != null) parts.push(`${label} ±1s width ${fmt(row.band_width_1_pips,1)}p`);
+  });
+  return parts.length ? parts.join(' · ') : 'VWAP room unavailable.';
+}
+
+function scoreBase(source, target, entryConfluence, targetConfluence, mode, side, forecast, rsiPack, ha, vwapPack) {
+  const pips = Math.abs(toPips(target.price - source.price));
+  let score = pips >= 20 && pips <= 50 ? 24 : pips > 50 ? 16 : 10;
+  score += Math.min(14, entryConfluence.length * 5);
+  score += Math.min(10, targetConfluence.length * 4);
+  score += Math.min(14, (source.qty / ((wallCtx?.all_top?.[0]?.qty) || source.qty || 1)) * 14);
+  score += Math.min(10, (source.hits || 0) * 2);
+  score += Math.min(6, (target.hits || 0) * 1.5);
+  if (mode === 'now') score += 6;
+  if (vwapPack.m15?.usable_for_10pip) score += 5;
+  if (pips >= 20 && (vwapPack.h1?.usable_for_20pip || vwapPack.m15?.usable_for_20pip)) score += 5;
+  if (pips < 20 && vwapPack.m15 && !vwapPack.m15.usable_for_10pip) score -= 8;
+  if (pips >= 20 && vwapPack.h1 && !vwapPack.h1.usable_for_20pip) score -= 8;
+  if (side === 'buy') {
+    if (forecast.bias === 'Bullish') score += 10;
+    if ((rsiPack.m15?.value ?? 50) <= 45) score += 8;
+    if ((rsiPack.h1?.value ?? 50) <= 50) score += 5;
+    if (ha?.reversalUp) score += 8;
+  } else {
+    if (forecast.bias === 'Bearish') score += 10;
+    if ((rsiPack.m15?.value ?? 50) >= 55) score += 8;
+    if ((rsiPack.h1?.value ?? 50) >= 50) score += 5;
+    if (ha?.reversalDown) score += 8;
   }
-  if (nearNow) score += 6;
-  return {
-    side: pips >= 50 ? 'bold-buy' : 'buy',
-    title: pips >= 50 ? 'Bold buy setup' : 'Buy setup',
-    setupType: nearNow ? 'Buy now / on touch' : 'Buy limit',
-    entry, target, pips, score,
-    stop: entry - Math.max(0.0008, (target - entry) * 0.35),
-    entryNote: nearNow ? `Price is already near the bid region around ${fmt(entry,4)}.` : `Wait for price to retrace ${waitPips} pips into the bid region around ${fmt(entry,4)}.`,
-    confluence,
-    sourceWall: bidWall,
-    targetWall: askWall,
-    targetLevels: resistances.filter(x => Math.abs(x.value - target) <= 0.0008),
-    rsiNote: rsiBiasLine(rsi)
-  };
-}
-
-function scoreSell(entry, target, askWall, bidWall, supports, resistances, currentPrice, forecast, rsi) {
-  const pips = Math.round((entry - target) / 0.0001);
-  if (!(entry > target) || pips < 10) return null;
-  const confluence = resistances.filter(x => Math.abs(x.value - entry) <= 0.0006);
-  const nearNow = Math.abs(currentPrice - entry) / 0.0001 <= 4;
-  const waitPips = Math.round((entry - currentPrice) / 0.0001);
-  if (entry < currentPrice - 0.0001) return null;
-  let score = 0;
-  score += Math.min(35, Math.round((askWall.qty / (wallCtx.all_top[0]?.qty || askWall.qty)) * 35));
-  score += Math.min(18, confluence.length * 6);
-  score += pips >= 20 && pips <= 50 ? 18 : pips > 50 ? 12 : 8;
-  if (forecast.bias === 'Bearish') score += 12;
-  if (forecast.bias === 'Bullish') score -= 10;
-  if (rsi && rsi.value != null) {
-    if (rsi.value >= 70) score += 16;
-    else if (rsi.value >= 60) score += 9;
-    else if (rsi.value <= 30) score -= 12;
-    else if (rsi.value <= 40) score -= 6;
-  }
-  if (nearNow) score += 6;
-  return {
-    side: pips >= 50 ? 'bold-sell' : 'sell',
-    title: pips >= 50 ? 'Bold sell setup' : 'Sell setup',
-    setupType: nearNow ? 'Sell now / on touch' : 'Sell limit',
-    entry, target, pips, score,
-    stop: entry + Math.max(0.0008, (entry - target) * 0.35),
-    entryNote: nearNow ? `Price is already near the ask region around ${fmt(entry,4)}.` : `Wait for price to rally ${waitPips} pips into the ask region around ${fmt(entry,4)}.`,
-    confluence,
-    sourceWall: askWall,
-    targetWall: bidWall,
-    targetLevels: supports.filter(x => Math.abs(x.value - target) <= 0.0008),
-    rsiNote: rsiBiasLine(rsi)
-  };
+  return Math.round(score);
 }
 
 function buildSetups() {
-  if (!priceCtx || !wallCtx || !levelsCtx) return [];
+  if (!priceCtx || !wallCtx || !levelsByTf.d1) return [];
   const currentPrice = (priceCtx.bid + priceCtx.ask) / 2;
-  const techLevels = collectTechnicalLevels(levelsCtx, currentPrice);
+  const forecast = getForecastDaily();
+  const rsiPack = getRsiPack();
+  const vwapPack = getVwapPack();
+  const ha = computeHeikinAshi(candles15m);
+  const techLevels = collectTechnicalLevels(levelsByTf.d1, currentPrice);
   const supports = techLevels.filter(x => x.kind === 'support').sort((a,b) => b.value - a.value);
   const resistances = techLevels.filter(x => x.kind === 'resistance').sort((a,b) => a.value - b.value);
-  const bidWalls = (wallCtx.bid_walls || []).filter(w => w.qty > 0).sort((a,b) => a.price - b.price);
-  const askWalls = (wallCtx.ask_walls || []).filter(w => w.qty > 0).sort((a,b) => a.price - b.price);
-  const forecast = getForecastDaily();
-  const rsi = getRsiContext();
+  const liquidity = mergeLiquidity(currentPrice);
+  const momentum = currentMomentum(rsiPack, ha);
   const setups = [];
+  const nearestBid = liquidity.bids.find(x => x.price < currentPrice);
+  const nearestAsk = liquidity.asks.find(x => x.price > currentPrice);
 
-  bidWalls.forEach(bidWall => {
-    const entryCandidates = [bidWall.price, ...supports.filter(s => Math.abs(s.value - bidWall.price) <= 0.0007).map(s => s.value)];
-    const entry = Math.min(...entryCandidates);
-    const targets = [
-      ...askWalls.filter(a => a.price > entry + 0.0010).map(a => ({value: a.price, askWall: a})),
-      ...resistances.filter(r => r.value > entry + 0.0010).map(r => ({value: r.value, askWall: null}))
-    ].sort((a,b) => a.value - b.value);
-    const targetPick = targets.find(t => {
-      const pips = Math.round((t.value - entry) / 0.0001);
-      return pips >= 20 && pips <= 60;
-    }) || targets.find(t => {
-      const pips = Math.round((t.value - entry) / 0.0001);
-      return pips >= 10 && pips <= 120;
+  if (nearestAsk && toPips(nearestAsk.price - currentPrice) >= 10 && momentum.canBuyNow) {
+    const entryAnchor = nearestBid || {price: currentPrice, qty: wallCtx?.all_top?.[0]?.qty || 0, hits: 0, family: 'current_flow'};
+    const entryConfluence = supports.filter(x => Math.abs(x.value - entryAnchor.price) <= 0.0008);
+    const targetConfluence = resistances.filter(x => Math.abs(x.value - nearestAsk.price) <= 0.0008);
+    const score = scoreBase({price: currentPrice, qty: entryAnchor.qty, hits: entryAnchor.hits}, nearestAsk, entryConfluence, targetConfluence, 'now', 'buy', forecast, rsiPack, ha, vwapPack);
+    setups.push({
+      side: score >= 68 || toPips(nearestAsk.price - currentPrice) >= 50 ? 'bold-buy' : 'buy',
+      title: score >= 68 || toPips(nearestAsk.price - currentPrice) >= 50 ? 'Bold buy setup' : 'Buy setup',
+      setupType: 'Buy now',
+      entry: currentPrice,
+      target: nearestAsk.price,
+      pips: toPips(nearestAsk.price - currentPrice),
+      score,
+      stop: Math.min(nearestBid?.price || currentPrice - 0.0008, currentPrice - 0.0008),
+      entryNote: `Momentum still supports a push into the ask region near ${fmt(nearestAsk.price,4)}.`,
+      confluence: entryConfluence,
+      sourceWall: entryAnchor,
+      targetWall: nearestAsk,
+      targetLevels: targetConfluence,
+      rsiNote: rsiPackLine(rsiPack),
+      vwapNote: vwapRoomLine(vwapPack),
+      candleNote: ha ? `15m Heikin Ashi is ${ha.direction}${ha.reversalUp ? ' with bullish reversal confirmation' : ''}.` : '15m candle confirmation unavailable.'
     });
-    if (!targetPick) return;
-    const setup = scoreBuy(entry, targetPick.value, bidWall, targetPick.askWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast, rsi);
-    if (setup) setups.push(setup);
+  }
+
+  liquidity.bids.forEach(bid => {
+    const retracePips = toPips(currentPrice - bid.price);
+    if (retracePips < 10 || retracePips > 25 || !momentum.canReachBid) return;
+    const askTarget = liquidity.asks.find(a => a.price > currentPrice + 0.0010);
+    if (!askTarget) return;
+    const entryConfluence = supports.filter(x => Math.abs(x.value - bid.price) <= 0.0008);
+    const targetConfluence = resistances.filter(x => Math.abs(x.value - askTarget.price) <= 0.0008);
+    const score = scoreBase(bid, askTarget, entryConfluence, targetConfluence, 'wait', 'buy', forecast, rsiPack, ha, vwapPack);
+    setups.push({
+      side: score >= 68 || toPips(askTarget.price - bid.price) >= 50 ? 'bold-buy' : 'buy',
+      title: score >= 68 || toPips(askTarget.price - bid.price) >= 50 ? 'Bold buy setup' : 'Buy setup',
+      setupType: 'Buy limit',
+      entry: bid.price,
+      target: askTarget.price,
+      pips: toPips(askTarget.price - bid.price),
+      score,
+      stop: bid.price - 0.0008,
+      entryNote: `Wait for a retrace into the stronger bid region near ${fmt(bid.price,4)} and target ${fmt(askTarget.price,4)}.`,
+      confluence: entryConfluence,
+      sourceWall: bid,
+      targetWall: askTarget,
+      targetLevels: targetConfluence,
+      rsiNote: rsiPackLine(rsiPack),
+      vwapNote: vwapRoomLine(vwapPack),
+      candleNote: ha ? `15m Heikin Ashi is ${ha.direction}.` : '15m candle confirmation unavailable.'
+    });
   });
 
-  askWalls.forEach(askWall => {
-    const entryCandidates = [askWall.price, ...resistances.filter(r => Math.abs(r.value - askWall.price) <= 0.0007).map(r => r.value)];
-    const entry = Math.max(...entryCandidates);
-    const targets = [
-      ...bidWalls.filter(b => b.price < entry - 0.0010).map(b => ({value: b.price, bidWall: b})),
-      ...supports.filter(s => s.value < entry - 0.0010).map(s => ({value: s.value, bidWall: null}))
-    ].sort((a,b) => b.value - a.value);
-    const targetPick = targets.find(t => {
-      const pips = Math.round((entry - t.value) / 0.0001);
-      return pips >= 20 && pips <= 60;
-    }) || targets.find(t => {
-      const pips = Math.round((entry - t.value) / 0.0001);
-      return pips >= 10 && pips <= 120;
+  if (nearestBid && toPips(currentPrice - nearestBid.price) >= 10 && momentum.canSellNow) {
+    const sourceAnchor = nearestAsk || {price: currentPrice, qty: wallCtx?.all_top?.[0]?.qty || 0, hits: 0, family: 'current_flow'};
+    const entryConfluence = resistances.filter(x => Math.abs(x.value - sourceAnchor.price) <= 0.0008);
+    const targetConfluence = supports.filter(x => Math.abs(x.value - nearestBid.price) <= 0.0008);
+    const score = scoreBase({price: currentPrice, qty: sourceAnchor.qty, hits: sourceAnchor.hits}, nearestBid, entryConfluence, targetConfluence, 'now', 'sell', forecast, rsiPack, ha, vwapPack);
+    setups.push({
+      side: score >= 68 || toPips(currentPrice - nearestBid.price) >= 50 ? 'bold-sell' : 'sell',
+      title: score >= 68 || toPips(currentPrice - nearestBid.price) >= 50 ? 'Bold sell setup' : 'Sell setup',
+      setupType: 'Sell now',
+      entry: currentPrice,
+      target: nearestBid.price,
+      pips: toPips(currentPrice - nearestBid.price),
+      score,
+      stop: Math.max(nearestAsk?.price || currentPrice + 0.0008, currentPrice + 0.0008),
+      entryNote: `Rejection conditions support selling now toward the bid region near ${fmt(nearestBid.price,4)}.`,
+      confluence: entryConfluence,
+      sourceWall: sourceAnchor,
+      targetWall: nearestBid,
+      targetLevels: targetConfluence,
+      rsiNote: rsiPackLine(rsiPack),
+      vwapNote: vwapRoomLine(vwapPack),
+      candleNote: ha ? `15m Heikin Ashi is ${ha.direction}${ha.reversalDown ? ' with bearish reversal confirmation' : ''}.` : '15m candle confirmation unavailable.'
     });
-    if (!targetPick) return;
-    const setup = scoreSell(entry, targetPick.value, askWall, targetPick.bidWall || {price: targetPick.value, qty: 0}, supports, resistances, currentPrice, forecast, rsi);
-    if (setup) setups.push(setup);
+  }
+
+  liquidity.asks.forEach(ask => {
+    const rallyPips = toPips(ask.price - currentPrice);
+    if (rallyPips < 10 || rallyPips > 20 || !momentum.canReachAsk) return;
+    const bidTarget = liquidity.bids.find(b => b.price < currentPrice - 0.0010);
+    if (!bidTarget) return;
+    const entryConfluence = resistances.filter(x => Math.abs(x.value - ask.price) <= 0.0008);
+    const targetConfluence = supports.filter(x => Math.abs(x.value - bidTarget.price) <= 0.0008);
+    const score = scoreBase(ask, bidTarget, entryConfluence, targetConfluence, 'wait', 'sell', forecast, rsiPack, ha, vwapPack);
+    setups.push({
+      side: score >= 68 || toPips(ask.price - bidTarget.price) >= 50 ? 'bold-sell' : 'sell',
+      title: score >= 68 || toPips(ask.price - bidTarget.price) >= 50 ? 'Bold sell setup' : 'Sell setup',
+      setupType: 'Sell limit',
+      entry: ask.price,
+      target: bidTarget.price,
+      pips: toPips(ask.price - bidTarget.price),
+      score,
+      stop: ask.price + 0.0008,
+      entryNote: `Only wait for this sell if price is still driving into the ask region near ${fmt(ask.price,4)}.`,
+      confluence: entryConfluence,
+      sourceWall: ask,
+      targetWall: bidTarget,
+      targetLevels: targetConfluence,
+      rsiNote: rsiPackLine(rsiPack),
+      vwapNote: vwapRoomLine(vwapPack),
+      candleNote: ha ? `15m Heikin Ashi is ${ha.direction}.` : '15m candle confirmation unavailable.'
+    });
   });
 
   const dedup = new Map();
   setups.forEach(s => {
-    const key = `${s.side}:${fmt(s.entry,4)}:${fmt(s.target,4)}`;
+    const key = `${s.setupType}:${fmt(s.entry,4)}:${fmt(s.target,4)}`;
     if (!dedup.has(key) || dedup.get(key).score < s.score) dedup.set(key, s);
   });
-
-  return [...dedup.values()].sort((a,b) => b.score - a.score).slice(0, 6);
+  return [...dedup.values()].sort((a,b) => b.score - a.score).slice(0, 8);
 }
 
 function renderContext() {
   const currentPrice = priceCtx ? (priceCtx.bid + priceCtx.ask) / 2 : null;
   const forecast = getForecastDaily();
-  const rsi = getRsiContext();
+  const rsiPack = getRsiPack();
+  const vwapPack = getVwapPack();
+  const ha = computeHeikinAshi(candles15m);
   document.getElementById('market-summary').innerHTML = priceCtx ? `
     <div>Current EUR/USD price is <b>${fmt(currentPrice,5)}</b> with day trend marked as <b>${priceCtx.trend}</b>.</div>
-    <div>Spread is <b>${fmt(priceCtx.spread,5)}</b>, day range is <b>${priceCtx.day_range_pips} pips</b>, and price sits <b>${priceCtx.range_position}%</b> through today's range.</div>
-    <div>${rsiBiasLine(rsi)}</div>
-    <div>The setup engine favors pullback buys in bullish conditions and rally sells in bearish conditions, but still requires valid liquidity-to-target distance.</div>
+    <div>Spread is <b>${fmt(priceCtx.spread,5)}</b>, day range is <b>${priceCtx.day_range_pips} pips</b>, and liquidity inside <b>10 pips</b> of price is ignored as settlement noise.</div>
+    <div><b>MTF RSI:</b> ${rsiPackLine(rsiPack)}</div>
+    <div><b>VWAP room:</b> ${vwapRoomLine(vwapPack)}</div>
+    <div><b>15m candle:</b> ${ha ? `${ha.direction}${ha.reversalUp ? ' bullish reversal' : ''}${ha.reversalDown ? ' bearish reversal' : ''}` : 'unavailable'}.</div>
+    <div><b>Stored liquidity:</b> ${persistentCtx ? `${(persistentCtx.bid_bands || []).length} bid bands and ${(persistentCtx.ask_bands || []).length} ask bands tracked 10-150 pips from price.` : 'unavailable'}.</div>
   ` : 'Price context unavailable.';
 
   document.getElementById('forecast-summary').innerHTML = forecastCtx ? `
@@ -320,7 +467,7 @@ function renderSetups() {
   const setups = buildSetups();
   const host = document.getElementById('setup-grid');
   if (!setups.length) {
-    host.innerHTML = '<div class="empty">No setups passed the minimum distance and confluence rules. This usually means the current wall-to-target map is too tight or lacks confirmation from levels/forecast bias.</div>';
+    host.innerHTML = '<div class="empty">No setups passed the upgraded filters. This usually means the current move lacks 15m/H1/H4 RSI confirmation, the candle state is weak, or the stronger liquidity regions are not far enough from price to offer a clean 10+ pip edge.</div>';
     return;
   }
 
@@ -337,9 +484,11 @@ function renderSetups() {
         <div class="stat"><div class="label">0.01 Lot</div><b>$${pipValueUsd(s.pips,0.01)}</b></div>
       </div>
       <div class="logic">
-        <div><b>Liquidity entry:</b> ${fmt(s.sourceWall.price,4)} using ${Math.round(s.sourceWall.qty)} units of visible liquidity.</div>
-        <div><b>Target zone:</b> ${fmt(s.target,4)}${s.targetWall && s.targetWall.qty ? ` with ${Math.round(s.targetWall.qty)} units on the opposite side.` : ' from technical resistance/support.'}</div>
+        <div><b>Entry region:</b> ${fmt(s.sourceWall.price,4)} from ${s.sourceWall.family.replace('_',' ')}${s.sourceWall.hits ? ` with ${s.sourceWall.hits} stored hits` : ''}.</div>
+        <div><b>Target region:</b> ${fmt(s.target,4)} from ${s.targetWall.family.replace('_',' ')}${s.targetWall.hits ? ` with ${s.targetWall.hits} stored hits` : ''}.</div>
         <div><b>RSI context:</b> ${s.rsiNote}</div>
+        <div><b>VWAP room:</b> ${s.vwapNote}</div>
+        <div><b>Candle confirmation:</b> ${s.candleNote}</div>
         <div><b>Technical confluence:</b> ${s.confluence.length ? s.confluence.map(c => `${c.name} (${c.family})`).join(', ') : 'none nearby'}</div>
         <div><b>Target confluence:</b> ${s.targetLevels.length ? s.targetLevels.map(c => `${c.name} (${c.family})`).join(', ') : 'liquidity-led target'}</div>
       </div>

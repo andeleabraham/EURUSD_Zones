@@ -273,6 +273,19 @@ def init_db():
                 signature_valid INTEGER NOT NULL DEFAULT 0,
                 created_at      TEXT    NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS liquidity_bands (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol          TEXT    NOT NULL DEFAULT 'EURUSD',
+                side            TEXT    NOT NULL,
+                bucket_price    REAL    NOT NULL,
+                first_seen      TEXT    NOT NULL,
+                last_seen       TEXT    NOT NULL,
+                hits            INTEGER NOT NULL DEFAULT 1,
+                max_qty         REAL    NOT NULL DEFAULT 0,
+                avg_qty         REAL    NOT NULL DEFAULT 0,
+                source          TEXT,
+                UNIQUE(symbol, side, bucket_price)
+            );
         """)
         for stmt in [
             "ALTER TABLE forecast_reports ADD COLUMN dxy_bias TEXT",
@@ -298,6 +311,47 @@ def parse_json_text(raw, default=None):
         return json.loads(raw)
     except Exception:
         return default
+
+def bucket_price(price, bucket_pips=10):
+    bucket_size = bucket_pips * 0.0001
+    return round(round(price / bucket_size) * bucket_size, 5)
+
+def persist_liquidity_bands(symbol, mid, levels, source, min_pips=10, max_pips=150, bucket_pips=10):
+    if not levels:
+        return
+    db = get_db()
+    now = now_utc()
+    for lv in levels:
+        pips = abs(lv["price"] - mid) / 0.0001
+        if pips < min_pips or pips > max_pips:
+            continue
+        bucket = bucket_price(lv["price"], bucket_pips=bucket_pips)
+        row = db.execute(
+            "SELECT id, hits, avg_qty, max_qty FROM liquidity_bands WHERE symbol=? AND side=? AND bucket_price=?",
+            (symbol, lv["side"], bucket)
+        ).fetchone()
+        if row:
+            hits = int(row["hits"]) + 1
+            avg_qty = ((float(row["avg_qty"]) * int(row["hits"])) + float(lv["qty"])) / hits
+            max_qty = max(float(row["max_qty"]), float(lv["qty"]))
+            db.execute(
+                """
+                UPDATE liquidity_bands
+                SET last_seen=?, hits=?, avg_qty=?, max_qty=?, source=?
+                WHERE id=?
+                """,
+                (now, hits, avg_qty, max_qty, source, row["id"])
+            )
+        else:
+            db.execute(
+                """
+                INSERT INTO liquidity_bands
+                (symbol, side, bucket_price, first_seen, last_seen, hits, max_qty, avg_qty, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (symbol, lv["side"], bucket, now, now, 1, float(lv["qty"]), float(lv["qty"]), source)
+            )
+    db.commit()
 
 def fetch_latest_forecast_report(symbol="EURUSD"):
     row = get_db().execute(
@@ -636,6 +690,8 @@ def api_nearest_walls():
             lv["is_wall"]  = lv["qty"] >= max_qty * 0.35
             lv["bar_pct"]  = round(lv["qty"] / max_qty * 100, 1)
 
+        persist_liquidity_bands("EURUSD", mid, top_magnets, depth_source, min_pips=10, max_pips=150, bucket_pips=10)
+
         bid_walls = sorted(
             [lv for lv in top_magnets if lv["side"] == "bid"
              and lv["price"] < mid and lv["dist"] >= min_gap],
@@ -658,6 +714,48 @@ def api_nearest_walls():
         }
         cache_set(cache_key, result)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+@app.route("/api/liquidity/persistent")
+def api_persistent_liquidity():
+    symbol = request.args.get("symbol", "EURUSD").upper()
+    min_pips = float(request.args.get("min_pips", 10))
+    max_pips = float(request.args.get("max_pips", 150))
+    limit = int(request.args.get("limit", 12))
+    try:
+        t = fetch_ticker()
+        mid = (t["bid"] + t["ask"]) / 2
+        rows = [
+            row_to_dict(r) for r in get_db().execute(
+                """
+                SELECT *
+                FROM liquidity_bands
+                WHERE symbol=?
+                ORDER BY hits DESC, max_qty DESC, last_seen DESC
+                """,
+                (symbol,)
+            ).fetchall()
+        ]
+        filtered = []
+        for row in rows:
+            pips = abs(float(row["bucket_price"]) - mid) / 0.0001
+            if pips < min_pips or pips > max_pips:
+                continue
+            row["pips"] = round(pips, 1)
+            row["dist"] = round(abs(float(row["bucket_price"]) - mid), 5)
+            filtered.append(row)
+
+        bid_bands = [r for r in filtered if r["side"] == "bid" and float(r["bucket_price"]) < mid][:limit]
+        ask_bands = [r for r in filtered if r["side"] == "ask" and float(r["bucket_price"]) > mid][:limit]
+        return jsonify({
+            "symbol": symbol,
+            "mid": round(mid, 5),
+            "bid_bands": bid_bands,
+            "ask_bands": ask_bands,
+            "count": len(filtered),
+            "ts": now_utc()
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 @app.route("/zones")
@@ -1058,19 +1156,20 @@ def calc_vwap(candles):
         return None
     cum_tv = 0.0
     cum_v  = 0.0
-    sq_sum = 0.0
+    cum_t_sq = 0.0
     for c in candles:
         tp      = (c["h"] + c["l"] + c["c"]) / 3
         cum_tv += tp * c["v"]
         cum_v  += c["v"]
+        cum_t_sq += c["v"] * tp * tp
     if cum_v == 0:
         return None
     vwap = cum_tv / cum_v
-    # Standard deviation bands
-    for c in candles:
-        tp      = (c["h"] + c["l"] + c["c"]) / 3
-        sq_sum += c["v"] * (tp - vwap) ** 2
-    variance = sq_sum / cum_v if cum_v else 0
+    # Match the MT5 indicator's single-pass, volume-weighted sigma:
+    # var = E(X^2) - E(X)^2
+    variance = (cum_t_sq / cum_v) - (vwap * vwap) if cum_v else 0
+    if variance < 0:
+        variance = 0
     std      = variance ** 0.5
     return {
         "vwap":    round(vwap, 5),
@@ -1079,7 +1178,29 @@ def calc_vwap(candles):
         "lower_1": round(vwap - std, 5),
         "lower_2": round(vwap - 2*std, 5),
         "std":     round(std, 5),
+        "band_width_1_pips": round((2 * std) / 0.0001, 1),
+        "band_width_2_pips": round((4 * std) / 0.0001, 1),
+        "room_to_upper_1_pips": round(max((vwap + std) - candles[-1]["c"], 0) / 0.0001, 1),
+        "room_to_lower_1_pips": round(max(candles[-1]["c"] - (vwap - std), 0) / 0.0001, 1),
+        "usable_for_10pip": (2 * std) / 0.0001 >= 10,
+        "usable_for_20pip": (2 * std) / 0.0001 >= 20,
     }
+
+def filter_vwap_session_candles(candles, interval_min):
+    """
+    Align VWAP resets more closely with the MT5 indicator:
+    intraday timeframes use candles since current UTC day start,
+    daily timeframe keeps a small recent window.
+    """
+    if not candles:
+        return candles
+    if interval_min >= 1440:
+        return candles[-20:]
+
+    latest_ts = int(candles[-1]["t"])
+    day_start = latest_ts - (latest_ts % 86400)
+    day_candles = [c for c in candles if int(c["t"]) >= day_start]
+    return day_candles if day_candles else candles[-200:]
 
 def calc_rsi(candles, period=14):
     """
@@ -1219,9 +1340,9 @@ def api_levels():
         # Murray Math from recent trading range
         murray = calc_murray_math(fib_h, fib_l, price)
 
-        # VWAP — use all available candles for the session
-        # For intraday TFs use up to 200 candles; for daily use 20
-        vwap_candles = candles_all[-200:] if interval_min < 1440 else candles_all[-20:]
+        # VWAP bands should reset from the active day/session context on lower TFs,
+        # which keeps sigma closer to the MT5 indicator and avoids rolling-window drift.
+        vwap_candles = filter_vwap_session_candles(candles_all, interval_min)
         vwap = calc_vwap(vwap_candles)
         rsi = calc_rsi(candles_all[-250:] if len(candles_all) > 250 else candles_all, period=14)
 
