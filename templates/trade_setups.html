@@ -306,6 +306,15 @@ function regionStrength(region) {
   return (region.qty || 0) + ((region.hits || 0) * 25);
 }
 
+function liquidityLine(label, region, currentPrice) {
+  if (!region || currentPrice == null) return `<b>${label}:</b> unavailable.`;
+  const pips = Math.abs(toPips(region.price - currentPrice));
+  const usd001 = pipValueUsd(pips, 0.01);
+  const qty = Number(region.qty || 0);
+  const hitsTxt = region.hits ? `, ${region.hits} stored hits` : '';
+  return `<b>${label}:</b> ${fmt(region.price,5)} (${pips} pips, $${usd001} at 0.01 lot) · vol ${qty.toLocaleString(undefined,{maximumFractionDigits:0})}${hitsTxt} · ${region.family.replaceAll('_',' ')}.`;
+}
+
 function detectLocalBias(currentPrice, liquidity, rsiPack) {
   const nearestBid = liquidity.bids.find(x => x.price < currentPrice) || null;
   const nearestAsk = liquidity.asks.find(x => x.price > currentPrice) || null;
@@ -554,11 +563,14 @@ function renderContext() {
   const rsiPack = getRsiPack();
   const vwapPack = getVwapPack();
   const ha = computeHeikinAshi(candles15m);
-  const localBias = priceCtx && wallCtx ? detectLocalBias(currentPrice, mergeLiquidity(currentPrice), rsiPack) : {bias:'balanced'};
+  const liquidity = priceCtx && wallCtx ? mergeLiquidity(currentPrice) : {bids: [], asks: []};
+  const localBias = priceCtx && wallCtx ? detectLocalBias(currentPrice, liquidity, rsiPack) : {bias:'balanced'};
   document.getElementById('market-summary').innerHTML = priceCtx ? `
     <div>Current EUR/USD price is <b>${fmt(currentPrice,5)}</b> with day trend marked as <b>${priceCtx.trend}</b>.</div>
     <div>Spread is <b>${fmt(priceCtx.spread,5)}</b>, day range is <b>${priceCtx.day_range_pips} pips</b>, and liquidity inside <b>10 pips</b> of price is ignored as settlement noise.</div>
     <div><b>Local flow:</b> ${localBias.bias.replace('_',' ')}.</div>
+    <div>${liquidityLine('Nearest bid liquidity', localBias.nearestBid, currentPrice)}</div>
+    <div>${liquidityLine('Nearest ask liquidity', localBias.nearestAsk, currentPrice)}</div>
     <div><b>MTF RSI:</b> ${rsiPackLine(rsiPack)}</div>
     <div><b>VWAP room:</b> ${vwapRoomLine(vwapPack)}</div>
     <div><b>15m candle:</b> ${ha ? `${ha.direction}${ha.reversalUp ? ' bullish reversal' : ''}${ha.reversalDown ? ' bearish reversal' : ''}` : 'unavailable'}.</div>
