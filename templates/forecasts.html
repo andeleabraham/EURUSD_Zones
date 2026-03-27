@@ -57,6 +57,7 @@ td{color:var(--text)}
         <div class="page-sub" style="margin:.5rem 0 1rem 0">Report date: {{ report.report_date or report.created_at }} · Source: {{ report.source or 'r_markdown' }}</div>
         <div>{{ payload.get('summary_text', 'No summary text was pushed with this report yet.') }}</div>
         <div class="page-sub" style="margin-top:1rem">Forecast mode: {{ payload.get('forecast_mode', 'price_only') }}</div>
+        <div class="page-sub" style="margin-top:.35rem">Intraday source: {{ payload.get('intraday_source_used', 'N/A') }}{% if payload.get('intraday_source_requested') %} (requested {{ payload.get('intraday_source_requested') }}){% endif %}</div>
       </div>
     </div>
     <div class="card">
@@ -239,6 +240,7 @@ td{color:var(--text)}
         <div><b>Payload size:</b> {{ report.payload_json|length }} chars</div>
         <div><b>Origin:</b> R Markdown knit push</div>
         <div><b>DXY bias:</b> {{ report.dxy_bias or 'N/A' }}</div>
+        <div><b>Intraday source:</b> {{ payload.get('intraday_source_used', 'N/A') }}</div>
         <div><b>SHA-256:</b> {{ integrity.get('payload_sha256', 'N/A') }}</div>
         <div><b>Signature valid:</b> {{ 'Yes' if integrity.get('signature_valid') else 'No' }}</div>
         <div style="margin-top:.7rem"><a href="/api/forecasts/latest" target="_blank">View raw latest payload</a></div>
