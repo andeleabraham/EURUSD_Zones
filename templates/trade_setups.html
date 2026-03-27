@@ -179,10 +179,23 @@ function getRsiPack() {
 
 function getVwapPack() {
   return {
-    m15: levelsByTf['15m']?.vwap || null,
-    h1: levelsByTf.h1?.vwap || null,
-    h4: levelsByTf.h4?.vwap || null
+    m15: {
+      daily: levelsByTf['15m']?.vwap || null,
+      session: levelsByTf['15m']?.session_vwap || null
+    },
+    h1: {
+      daily: levelsByTf.h1?.vwap || null,
+      session: levelsByTf.h1?.session_vwap || null
+    },
+    h4: {
+      daily: levelsByTf.h4?.vwap || null,
+      session: levelsByTf.h4?.session_vwap || null
+    }
   };
+}
+
+function activeVwap(row) {
+  return row?.session || row?.daily || null;
 }
 
 function rsiPackLine(rsi) {
@@ -279,13 +292,43 @@ function currentMomentum(rsiPack, ha) {
 function vwapRoomLine(vwapPack) {
   const parts = [];
   [['15m', vwapPack.m15], ['H1', vwapPack.h1], ['H4', vwapPack.h4]].forEach(([label, row]) => {
-    if (row?.band_width_1_pips != null) parts.push(`${label} ±1s width ${fmt(row.band_width_1_pips,1)}p`);
+    const active = activeVwap(row);
+    if (active?.band_width_1_pips != null) {
+      const mode = row?.session ? `${row.session.session_label || 'Session'} session` : 'daily';
+      parts.push(`${label} ${mode} ±1s width ${fmt(active.band_width_1_pips,1)}p`);
+    }
   });
   return parts.length ? parts.join(' · ') : 'VWAP room unavailable.';
 }
 
+function regionStrength(region) {
+  if (!region) return 0;
+  return (region.qty || 0) + ((region.hits || 0) * 25);
+}
+
+function detectLocalBias(currentPrice, liquidity, rsiPack) {
+  const nearestBid = liquidity.bids.find(x => x.price < currentPrice) || null;
+  const nearestAsk = liquidity.asks.find(x => x.price > currentPrice) || null;
+  const bidPips = nearestBid ? toPips(currentPrice - nearestBid.price) : 999;
+  const askPips = nearestAsk ? toPips(nearestAsk.price - currentPrice) : 999;
+  const bidStrength = regionStrength(nearestBid);
+  const askStrength = regionStrength(nearestAsk);
+  const r15 = rsiPack.m15?.value ?? 50;
+  const r1 = rsiPack.h1?.value ?? 50;
+
+  if (bidPips <= 12 && (bidStrength >= askStrength * 0.9 || askPips > bidPips + 6) && r15 <= 48 && r1 <= 52) {
+    return { bias: 'bid_dominant', nearestBid, nearestAsk, bidPips, askPips };
+  }
+  if (askPips <= 12 && (askStrength >= bidStrength * 0.9 || bidPips > askPips + 6) && r15 >= 52 && r1 >= 48) {
+    return { bias: 'ask_dominant', nearestBid, nearestAsk, bidPips, askPips };
+  }
+  return { bias: 'balanced', nearestBid, nearestAsk, bidPips, askPips };
+}
+
 function scoreBase(source, target, entryConfluence, targetConfluence, mode, side, forecast, rsiPack, ha, vwapPack) {
   const pips = Math.abs(toPips(target.price - source.price));
+  const vwap15 = activeVwap(vwapPack.m15);
+  const vwapH1 = activeVwap(vwapPack.h1);
   let score = pips >= 20 && pips <= 50 ? 24 : pips > 50 ? 16 : 10;
   score += Math.min(14, entryConfluence.length * 5);
   score += Math.min(10, targetConfluence.length * 4);
@@ -293,10 +336,10 @@ function scoreBase(source, target, entryConfluence, targetConfluence, mode, side
   score += Math.min(10, (source.hits || 0) * 2);
   score += Math.min(6, (target.hits || 0) * 1.5);
   if (mode === 'now') score += 6;
-  if (vwapPack.m15?.usable_for_10pip) score += 5;
-  if (pips >= 20 && (vwapPack.h1?.usable_for_20pip || vwapPack.m15?.usable_for_20pip)) score += 5;
-  if (pips < 20 && vwapPack.m15 && !vwapPack.m15.usable_for_10pip) score -= 8;
-  if (pips >= 20 && vwapPack.h1 && !vwapPack.h1.usable_for_20pip) score -= 8;
+  if (vwap15?.usable_for_10pip) score += 5;
+  if (pips >= 20 && (vwapH1?.usable_for_20pip || vwap15?.usable_for_20pip)) score += 5;
+  if (pips < 20 && vwap15 && !vwap15.usable_for_10pip) score -= 8;
+  if (pips >= 20 && vwapH1 && !vwapH1.usable_for_20pip) score -= 8;
   if (side === 'buy') {
     if (forecast.bias === 'Bullish') score += 10;
     if ((rsiPack.m15?.value ?? 50) <= 45) score += 8;
@@ -317,22 +360,24 @@ function buildSetups() {
   const forecast = getForecastDaily();
   const rsiPack = getRsiPack();
   const vwapPack = getVwapPack();
+  const vwap15 = activeVwap(vwapPack.m15);
   const ha = computeHeikinAshi(candles15m);
   const techLevels = collectTechnicalLevels(levelsByTf.d1, currentPrice);
   const supports = techLevels.filter(x => x.kind === 'support').sort((a,b) => b.value - a.value);
   const resistances = techLevels.filter(x => x.kind === 'resistance').sort((a,b) => a.value - b.value);
   const liquidity = mergeLiquidity(currentPrice);
   const momentum = currentMomentum(rsiPack, ha);
+  const localBias = detectLocalBias(currentPrice, liquidity, rsiPack);
   const setups = [];
-  const nearestBid = liquidity.bids.find(x => x.price < currentPrice);
-  const nearestAsk = liquidity.asks.find(x => x.price > currentPrice);
+  const nearestBid = localBias.nearestBid;
+  const nearestAsk = localBias.nearestAsk;
 
-  if (nearestAsk && toPips(nearestAsk.price - currentPrice) >= 10 && momentum.canBuyNow) {
+  if (nearestAsk && toPips(nearestAsk.price - currentPrice) >= 10 && toPips(nearestAsk.price - currentPrice) <= 35 && momentum.canBuyNow && localBias.bias !== 'ask_dominant') {
     const entryAnchor = nearestBid || {price: currentPrice, qty: wallCtx?.all_top?.[0]?.qty || 0, hits: 0, family: 'current_flow'};
     const entryConfluence = supports.filter(x => Math.abs(x.value - entryAnchor.price) <= 0.0008);
     const targetConfluence = resistances.filter(x => Math.abs(x.value - nearestAsk.price) <= 0.0008);
     const score = scoreBase({price: currentPrice, qty: entryAnchor.qty, hits: entryAnchor.hits}, nearestAsk, entryConfluence, targetConfluence, 'now', 'buy', forecast, rsiPack, ha, vwapPack);
-    setups.push({
+    if (score >= 44) setups.push({
       side: score >= 68 || toPips(nearestAsk.price - currentPrice) >= 50 ? 'bold-buy' : 'buy',
       title: score >= 68 || toPips(nearestAsk.price - currentPrice) >= 50 ? 'Bold buy setup' : 'Buy setup',
       setupType: 'Buy now',
@@ -354,13 +399,15 @@ function buildSetups() {
 
   liquidity.bids.forEach(bid => {
     const retracePips = toPips(currentPrice - bid.price);
-    if (retracePips < 10 || retracePips > 25 || !momentum.canReachBid) return;
+    if (retracePips < 10 || retracePips > 25 || !momentum.canReachBid || localBias.bias === 'ask_dominant') return;
     const askTarget = liquidity.asks.find(a => a.price > currentPrice + 0.0010);
     if (!askTarget) return;
+    const totalPips = toPips(askTarget.price - bid.price);
+    if (totalPips > 60) return;
     const entryConfluence = supports.filter(x => Math.abs(x.value - bid.price) <= 0.0008);
     const targetConfluence = resistances.filter(x => Math.abs(x.value - askTarget.price) <= 0.0008);
     const score = scoreBase(bid, askTarget, entryConfluence, targetConfluence, 'wait', 'buy', forecast, rsiPack, ha, vwapPack);
-    setups.push({
+    if (score >= 46) setups.push({
       side: score >= 68 || toPips(askTarget.price - bid.price) >= 50 ? 'bold-buy' : 'buy',
       title: score >= 68 || toPips(askTarget.price - bid.price) >= 50 ? 'Bold buy setup' : 'Buy setup',
       setupType: 'Buy limit',
@@ -380,12 +427,12 @@ function buildSetups() {
     });
   });
 
-  if (nearestBid && toPips(currentPrice - nearestBid.price) >= 10 && momentum.canSellNow) {
+  if (nearestBid && nearestAsk && localBias.askPips <= 8 && toPips(currentPrice - nearestBid.price) >= 10 && toPips(currentPrice - nearestBid.price) <= 35 && momentum.canSellNow && localBias.bias === 'ask_dominant') {
     const sourceAnchor = nearestAsk || {price: currentPrice, qty: wallCtx?.all_top?.[0]?.qty || 0, hits: 0, family: 'current_flow'};
     const entryConfluence = resistances.filter(x => Math.abs(x.value - sourceAnchor.price) <= 0.0008);
     const targetConfluence = supports.filter(x => Math.abs(x.value - nearestBid.price) <= 0.0008);
     const score = scoreBase({price: currentPrice, qty: sourceAnchor.qty, hits: sourceAnchor.hits}, nearestBid, entryConfluence, targetConfluence, 'now', 'sell', forecast, rsiPack, ha, vwapPack);
-    setups.push({
+    if (score >= 48) setups.push({
       side: score >= 68 || toPips(currentPrice - nearestBid.price) >= 50 ? 'bold-sell' : 'sell',
       title: score >= 68 || toPips(currentPrice - nearestBid.price) >= 50 ? 'Bold sell setup' : 'Sell setup',
       setupType: 'Sell now',
@@ -407,13 +454,15 @@ function buildSetups() {
 
   liquidity.asks.forEach(ask => {
     const rallyPips = toPips(ask.price - currentPrice);
-    if (rallyPips < 10 || rallyPips > 20 || !momentum.canReachAsk) return;
+    if (rallyPips < 10 || rallyPips > 20 || !momentum.canReachAsk || localBias.bias === 'bid_dominant') return;
     const bidTarget = liquidity.bids.find(b => b.price < currentPrice - 0.0010);
     if (!bidTarget) return;
+    const totalPips = toPips(ask.price - bidTarget.price);
+    if (totalPips > 60) return;
     const entryConfluence = resistances.filter(x => Math.abs(x.value - ask.price) <= 0.0008);
     const targetConfluence = supports.filter(x => Math.abs(x.value - bidTarget.price) <= 0.0008);
     const score = scoreBase(ask, bidTarget, entryConfluence, targetConfluence, 'wait', 'sell', forecast, rsiPack, ha, vwapPack);
-    setups.push({
+    if (score >= 50 && (rsiPack.m15?.value ?? 50) >= 50) setups.push({
       side: score >= 68 || toPips(ask.price - bidTarget.price) >= 50 ? 'bold-sell' : 'sell',
       title: score >= 68 || toPips(ask.price - bidTarget.price) >= 50 ? 'Bold sell setup' : 'Sell setup',
       setupType: 'Sell limit',
@@ -433,6 +482,64 @@ function buildSetups() {
     });
   });
 
+  if (vwap15 && nearestBid && localBias.bias !== 'ask_dominant') {
+    const roomToMean = vwap15.room_to_upper_1_pips ?? 0;
+    const buyRegionPips = toPips(currentPrice - nearestBid.price);
+    if (buyRegionPips >= 10 && buyRegionPips <= 25 && roomToMean >= 10 && (rsiPack.m15?.value ?? 50) <= 45) {
+      const entryConfluence = supports.filter(x => Math.abs(x.value - nearestBid.price) <= 0.0008);
+      const vwapTarget = vwap15.upper_1;
+      const targetLevels = resistances.filter(x => Math.abs(x.value - vwapTarget) <= 0.0008);
+      const score = 50 + Math.min(10, entryConfluence.length * 3) + (vwap15.usable_for_20pip ? 4 : 0);
+      setups.push({
+        side: 'buy',
+        title: 'VWAP buy setup',
+        setupType: 'Buy limit',
+        entry: nearestBid.price,
+        target: vwapTarget,
+        pips: toPips(vwapTarget - nearestBid.price),
+        score,
+        stop: nearestBid.price - 0.0008,
+        entryNote: `Buy the lower bid region near ${fmt(nearestBid.price,4)} and target the active 15m VWAP upper band near ${fmt(vwapTarget,4)}.`,
+        confluence: entryConfluence,
+        sourceWall: nearestBid,
+        targetWall: {price: vwapTarget, family: 'vwap_band', hits: 0},
+        targetLevels,
+        rsiNote: rsiPackLine(rsiPack),
+        vwapNote: vwapRoomLine(vwapPack),
+        candleNote: ha ? `15m Heikin Ashi is ${ha.direction}.` : '15m candle confirmation unavailable.'
+      });
+    }
+  }
+
+  if (vwap15 && nearestAsk && localBias.bias === 'ask_dominant') {
+    const roomToMean = vwap15.room_to_lower_1_pips ?? 0;
+    const sellRegionPips = toPips(nearestAsk.price - currentPrice);
+    if (sellRegionPips >= 10 && sellRegionPips <= 25 && roomToMean >= 10 && (rsiPack.m15?.value ?? 50) >= 55) {
+      const entryConfluence = resistances.filter(x => Math.abs(x.value - nearestAsk.price) <= 0.0008);
+      const vwapTarget = vwap15.lower_1;
+      const targetLevels = supports.filter(x => Math.abs(x.value - vwapTarget) <= 0.0008);
+      const score = 50 + Math.min(10, entryConfluence.length * 3) + (vwap15.usable_for_20pip ? 4 : 0);
+      setups.push({
+        side: 'sell',
+        title: 'VWAP sell setup',
+        setupType: 'Sell limit',
+        entry: nearestAsk.price,
+        target: vwapTarget,
+        pips: toPips(nearestAsk.price - vwapTarget),
+        score,
+        stop: nearestAsk.price + 0.0008,
+        entryNote: `Sell from the higher ask region near ${fmt(nearestAsk.price,4)} and target the active 15m VWAP lower band near ${fmt(vwapTarget,4)}.`,
+        confluence: entryConfluence,
+        sourceWall: nearestAsk,
+        targetWall: {price: vwapTarget, family: 'vwap_band', hits: 0},
+        targetLevels,
+        rsiNote: rsiPackLine(rsiPack),
+        vwapNote: vwapRoomLine(vwapPack),
+        candleNote: ha ? `15m Heikin Ashi is ${ha.direction}.` : '15m candle confirmation unavailable.'
+      });
+    }
+  }
+
   const dedup = new Map();
   setups.forEach(s => {
     const key = `${s.setupType}:${fmt(s.entry,4)}:${fmt(s.target,4)}`;
@@ -447,9 +554,11 @@ function renderContext() {
   const rsiPack = getRsiPack();
   const vwapPack = getVwapPack();
   const ha = computeHeikinAshi(candles15m);
+  const localBias = priceCtx && wallCtx ? detectLocalBias(currentPrice, mergeLiquidity(currentPrice), rsiPack) : {bias:'balanced'};
   document.getElementById('market-summary').innerHTML = priceCtx ? `
     <div>Current EUR/USD price is <b>${fmt(currentPrice,5)}</b> with day trend marked as <b>${priceCtx.trend}</b>.</div>
     <div>Spread is <b>${fmt(priceCtx.spread,5)}</b>, day range is <b>${priceCtx.day_range_pips} pips</b>, and liquidity inside <b>10 pips</b> of price is ignored as settlement noise.</div>
+    <div><b>Local flow:</b> ${localBias.bias.replace('_',' ')}.</div>
     <div><b>MTF RSI:</b> ${rsiPackLine(rsiPack)}</div>
     <div><b>VWAP room:</b> ${vwapRoomLine(vwapPack)}</div>
     <div><b>15m candle:</b> ${ha ? `${ha.direction}${ha.reversalUp ? ' bullish reversal' : ''}${ha.reversalDown ? ' bearish reversal' : ''}` : 'unavailable'}.</div>

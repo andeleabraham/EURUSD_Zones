@@ -1175,13 +1175,18 @@ def calc_vwap(candles):
         "vwap":    round(vwap, 5),
         "upper_1": round(vwap + std, 5),
         "upper_2": round(vwap + 2*std, 5),
+        "upper_3": round(vwap + 3*std, 5),
         "lower_1": round(vwap - std, 5),
         "lower_2": round(vwap - 2*std, 5),
+        "lower_3": round(vwap - 3*std, 5),
         "std":     round(std, 5),
         "band_width_1_pips": round((2 * std) / 0.0001, 1),
         "band_width_2_pips": round((4 * std) / 0.0001, 1),
+        "band_width_3_pips": round((6 * std) / 0.0001, 1),
         "room_to_upper_1_pips": round(max((vwap + std) - candles[-1]["c"], 0) / 0.0001, 1),
+        "room_to_upper_2_pips": round(max((vwap + 2*std) - candles[-1]["c"], 0) / 0.0001, 1),
         "room_to_lower_1_pips": round(max(candles[-1]["c"] - (vwap - std), 0) / 0.0001, 1),
+        "room_to_lower_2_pips": round(max(candles[-1]["c"] - (vwap - 2*std), 0) / 0.0001, 1),
         "usable_for_10pip": (2 * std) / 0.0001 >= 10,
         "usable_for_20pip": (2 * std) / 0.0001 >= 20,
     }
@@ -1201,6 +1206,63 @@ def filter_vwap_session_candles(candles, interval_min):
     day_start = latest_ts - (latest_ts % 86400)
     day_candles = [c for c in candles if int(c["t"]) >= day_start]
     return day_candles if day_candles else candles[-200:]
+
+
+VWAP_SESSION_WINDOWS = [
+    {"name": "asia", "label": "Asian", "start_hour": 21, "end_hour": 9},
+    {"name": "london", "label": "London", "start_hour": 7, "end_hour": 16},
+    {"name": "newyork", "label": "New York", "start_hour": 12, "end_hour": 21},
+]
+
+
+def get_active_vwap_session(ts_utc):
+    dt = datetime.fromtimestamp(int(ts_utc), tz=timezone.utc)
+    hour = dt.hour
+    for sess in VWAP_SESSION_WINDOWS:
+        start_hour = sess["start_hour"]
+        end_hour = sess["end_hour"]
+        if start_hour < end_hour:
+            in_session = start_hour <= hour < end_hour
+        else:
+            in_session = hour >= start_hour or hour < end_hour
+        if in_session:
+            return sess
+    return None
+
+
+def filter_active_session_candles(candles, interval_min):
+    """
+    Return candles for the currently active UTC session so lower-timeframe
+    VWAP can mirror the MT5 session reset behavior more closely.
+    """
+    if not candles or interval_min >= 1440:
+        return []
+
+    latest_ts = int(candles[-1]["t"])
+    session = get_active_vwap_session(latest_ts)
+    if not session:
+        return []
+
+    dt = datetime.fromtimestamp(latest_ts, tz=timezone.utc)
+    midnight = latest_ts - (latest_ts % 86400)
+    start_hour = session["start_hour"]
+    end_hour = session["end_hour"]
+    wraps = start_hour >= end_hour
+
+    if wraps and dt.hour < end_hour:
+        session_start = midnight - 86400 + (start_hour * 3600)
+        session_end = midnight + (end_hour * 3600)
+    else:
+        session_start = midnight + (start_hour * 3600)
+        session_end = midnight + (end_hour * 3600)
+        if wraps:
+            session_end += 86400
+
+    selected = [
+        c for c in candles
+        if session_start <= int(c["t"]) < session_end
+    ]
+    return selected if selected else []
 
 def calc_rsi(candles, period=14):
     """
@@ -1344,6 +1406,14 @@ def api_levels():
         # which keeps sigma closer to the MT5 indicator and avoids rolling-window drift.
         vwap_candles = filter_vwap_session_candles(candles_all, interval_min)
         vwap = calc_vwap(vwap_candles)
+        session_vwap_candles = filter_active_session_candles(candles_all, interval_min)
+        session_vwap = calc_vwap(session_vwap_candles) if session_vwap_candles else None
+        active_session = get_active_vwap_session(candles_all[-1]["t"]) if interval_min < 1440 else None
+        if session_vwap and active_session:
+            session_vwap["session_name"] = active_session["name"]
+            session_vwap["session_label"] = active_session["label"]
+            session_vwap["window_utc"] = f'{active_session["start_hour"]:02d}:00-{active_session["end_hour"]:02d}:00 UTC'
+            session_vwap["sample_size"] = len(session_vwap_candles)
         rsi = calc_rsi(candles_all[-250:] if len(candles_all) > 250 else candles_all, period=14)
 
         # Round all levels to 5dp for clean display
@@ -1363,6 +1433,7 @@ def api_levels():
             "fibonacci":   fibonacci,
             "murray":      murray,
             "vwap":        vwap,
+            "session_vwap": session_vwap,
             "rsi":         rsi,
             "source":      ticker.get("source"),
             "ts":          now_utc(),
