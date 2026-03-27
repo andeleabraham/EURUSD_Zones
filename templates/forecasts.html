@@ -43,6 +43,7 @@ td{color:var(--text)}
 {% set horizon_compare = payload.get('horizon_comparison', []) %}
 {% set sessions = payload.get('session_forecasts', []) %}
 {% set session_defs = payload.get('session_definitions', []) %}
+{% set session_transition_summary = payload.get('session_transition_summary', []) %}
 {% set calendar_variants = payload.get('calendar_variants', []) %}
 {% set models = payload.get('simulation_models', []) %}
 {% set dxy = payload.get('dxy_context', {}) %}
@@ -214,8 +215,10 @@ td{color:var(--text)}
           <div class="metric-value"><span class="pill {{ (row.get('bias', 'neutral'))|lower }}">{{ row.get('bias', 'N/A') }}</span></div>
           <div class="metric-sub">{{ row.get('session_window', 'UTC window N/A') }}</div>
           <div class="metric-sub">Date {{ row.get('trade_date', 'N/A') }}</div>
+          <div class="metric-sub">Prior {{ row.get('prior_session', 'N/A') }} {{ row.get('prior_direction', '') }}</div>
           <div class="metric-sub">Close {{ row.get('last_close', 'N/A') }}</div>
           <div class="metric-sub">Range {{ row.get('projected_low', 'N/A') }} to {{ row.get('projected_high', 'N/A') }}</div>
+          <div class="metric-sub">{{ row.get('transition_note', '') }}</div>
         </div>
         {% endfor %}
       </div>
@@ -233,6 +236,44 @@ td{color:var(--text)}
     </div>
 
     <div class="card">
+      <div class="sec-lbl">Session Handoffs</div>
+      {% if session_transition_summary %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>Compared To</th>
+              <th>Reached Prior High</th>
+              <th>Reached Prior Low</th>
+              <th>Broke Prior High</th>
+              <th>Broke Prior Low</th>
+              <th>Followed Direction</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in session_transition_summary %}
+            <tr>
+              <td>{{ row.get('session', 'N/A') }}</td>
+              <td>{{ row.get('prior_session', 'N/A') }}</td>
+              <td>{{ row.get('reached_prior_high', 'N/A') }}</td>
+              <td>{{ row.get('reached_prior_low', 'N/A') }}</td>
+              <td>{{ row.get('broke_prior_high', 'N/A') }}</td>
+              <td>{{ row.get('broke_prior_low', 'N/A') }}</td>
+              <td>{{ row.get('followed_prior_direction', 'N/A') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">No session handoff data was pushed with this report.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="hero-grid">
+    <div class="card">
       <div class="sec-lbl">Push Metadata</div>
       <div class="summary">
         <div><b>Created:</b> {{ report.created_at }}</div>
@@ -246,44 +287,41 @@ td{color:var(--text)}
         <div style="margin-top:.7rem"><a href="/api/forecasts/latest" target="_blank">View raw latest payload</a></div>
       </div>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="sec-lbl">Calendar Flow Variants</div>
-    {% if calendar_variants %}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Variant</th>
-            <th>Bias</th>
-            <th>Last Date</th>
-            <th>Projected Low</th>
-            <th>Projected High</th>
-            <th>Avg Next-Day Return</th>
-            <th>Avg Range</th>
-            <th>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in calendar_variants %}
-          <tr>
-            <td>{{ row.get('variant', 'N/A') }}</td>
-            <td><span class="pill {{ (row.get('bias', 'neutral'))|lower }}">{{ row.get('bias', 'N/A') }}</span></td>
-            <td>{{ row.get('last_date', 'N/A') }}</td>
-            <td>{{ row.get('projected_low', 'N/A') }}</td>
-            <td>{{ row.get('projected_high', 'N/A') }}</td>
-            <td>{{ row.get('avg_next_day_return', 'N/A') }}</td>
-            <td>{{ row.get('avg_range', 'N/A') }}</td>
-            <td>{{ row.get('note', 'N/A') }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="card">
+      <div class="sec-lbl">Calendar Flow Variants</div>
+      {% if calendar_variants %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Variant</th>
+              <th>Bias</th>
+              <th>Last Date</th>
+              <th>Projected Low</th>
+              <th>Projected High</th>
+              <th>Avg Next-Day Return</th>
+              <th>Avg Range</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in calendar_variants %}
+            <tr>
+              <td>{{ row.get('variant', 'N/A') }}</td>
+              <td><span class="pill {{ (row.get('bias', 'neutral'))|lower }}">{{ row.get('bias', 'N/A') }}</span></td>
+              <td>{{ row.get('last_date', 'N/A') }}</td>
+              <td>{{ row.get('projected_low', 'N/A') }}</td>
+              <td>{{ row.get('projected_high', 'N/A') }}</td>
+              <td>{{ row.get('avg_next_day_return', 'N/A') }}</td>
+              <td>{{ row.get('avg_range', 'N/A') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">No calendar-flow variants were pushed with this report.</div>
+      {% endif %}
     </div>
-    {% else %}
-    <div class="empty">No calendar-flow variants were pushed with this report.</div>
-    {% endif %}
   </div>
 </div>
 {% else %}
