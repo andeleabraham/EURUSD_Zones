@@ -192,7 +192,7 @@ NEGATIVE_TERMS = [
     "fall", "falls", "falling", "drop", "drops", "dropped", "down", "lower", "cooler",
     "weak", "weaker", "miss", "misses", "below", "plunge", "slump", "dovish", "cut",
     "cuts", "easing", "recession", "fear", "contract", "contracts", "slowdown",
-    "softens", "decline", "declines"
+    "softens", "decline", "declines", "slides", "slide", "fade", "fades", "fading",
 ]
 
 
