@@ -383,74 +383,150 @@ def _get(url, params=None, timeout=10):
 # ── Source detection cache — remember which source worked ─────────
 _working_source = {"ticker": None, "depth": None}
 
+VALID_SOURCE_MODES = {"auto", "binance", "kraken", "combined"}
+
+
+def normalise_source_mode(value):
+    mode = (value or "auto").strip().lower()
+    return mode if mode in VALID_SOURCE_MODES else "auto"
+
+
+def requested_source_mode():
+    return normalise_source_mode(request.args.get("source_mode"))
+
+
+def merge_depth_levels(levels, side):
+    if not levels:
+        return []
+    merged = []
+    for price, qty in sorted(levels, key=lambda row: row[0]):
+        if merged and abs(price - merged[-1][0]) < 0.0001:
+            merged[-1][1] += qty
+        else:
+            merged.append([price, qty])
+    reverse = side == "bid"
+    merged.sort(key=lambda row: row[0], reverse=reverse)
+    return merged
+
+
+def _fetch_ticker_binance():
+    d = _get(BINANCE_24H, {"symbol": "EURUSDC"}, timeout=8)
+    if isinstance(d, dict) and "code" in d and d["code"] != 200:
+        raise Exception("Binance geo-block: " + str(d.get("msg", "")))
+    price = float(d["lastPrice"])
+    open_p = float(d["openPrice"])
+    high = float(d["highPrice"])
+    low = float(d["lowPrice"])
+    return _normalise_ticker(
+        price, open_p, high, low,
+        float(d["bidPrice"]), float(d["askPrice"]),
+        float(d["volume"]), float(d["priceChangePercent"]),
+        source="binance"
+    )
+
+
+def _fetch_ticker_kraken():
+    data = _get(KRAKEN_TICKER, {"pair": KRAKEN_PAIR}, timeout=10)
+    if data.get("error"):
+        raise Exception(str(data["error"]))
+    pd = (data.get("result", {}).get("EURUSD")
+          or data.get("result", {}).get("ZEURZUSD")
+          or list(data.get("result", {}).values())[0])
+    price = float(pd["c"][0])
+    open_p = float(pd["o"])
+    high = float(pd["h"][0])
+    low = float(pd["l"][0])
+    return _normalise_ticker(
+        price, open_p, high, low,
+        float(pd["b"][0]), float(pd["a"][0]),
+        float(pd["v"][0]),
+        round((price - open_p) / open_p * 100, 4),
+        source="kraken"
+    )
+
+
+def _fetch_ticker_coingecko():
+    data = _get(
+        COINGECKO_URL,
+        {"ids": "euro", "vs_currencies": "usd", "include_24hr_change": "true"},
+        timeout=10
+    )
+    price = float(data["euro"]["usd"])
+    chg = float(data["euro"].get("usd_24h_change", 0))
+    return _normalise_ticker(
+        price, price * (1 - chg / 100), price * 1.002, price * 0.998,
+        price - 0.00020, price + 0.00020, 0, chg, source="coingecko"
+    )
+
+
+def _fetch_depth_binance():
+    d = _get(BINANCE_DEPTH, {"symbol": "EURUSDC", "limit": 150}, timeout=8)
+    if isinstance(d, dict) and "code" in d:
+        raise Exception("Binance geo-block")
+    bids = [[float(p), float(q)] for p, q in d["bids"]]
+    asks = [[float(p), float(q)] for p, q in d["asks"]]
+    return bids, asks, "binance"
+
+
+def _fetch_depth_kraken():
+    data = _get(KRAKEN_DEPTH, {"pair": KRAKEN_PAIR, "count": 150}, timeout=10)
+    if data.get("error"):
+        raise Exception(str(data["error"]))
+    pd = (data.get("result", {}).get("EURUSD")
+          or data.get("result", {}).get("ZEURZUSD")
+          or list(data.get("result", {}).values())[0])
+    bids = [[float(p), float(q)] for p, q, _ in pd["bids"]]
+    asks = [[float(p), float(q)] for p, q, _ in pd["asks"]]
+    return bids, asks, "kraken"
+
+
+def _fetch_depth_coinbase():
+    data = _get(COINBASE_DEPTH, {"product_id": "EUR-USD", "limit": 50}, timeout=10)
+    pb = data.get("pricebook", {})
+    bids = [[float(x["price"]), float(x["size"])] for x in pb.get("bids", [])]
+    asks = [[float(x["price"]), float(x["size"])] for x in pb.get("asks", [])]
+    return bids, asks, "coinbase"
+
 def fetch_ticker():
     """
     Try Binance first. On geo-block or error, fall through to
     Kraken, then Coinbase, then CoinGecko (price only).
     Returns a normalised dict regardless of source.
     """
-    cached = cache_get("ticker_data", ttl=30)
+    return fetch_ticker_for_mode("auto")
+
+
+def fetch_ticker_for_mode(source_mode="auto"):
+    source_mode = normalise_source_mode(source_mode)
+    cached = cache_get(f"ticker_data_{source_mode}", ttl=30)
     if cached:
         return cached
 
-    # ── 1. Binance (EURUSDC) ──────────────────────────────────────
-    try:
-        d = _get(BINANCE_24H, {"symbol": "EURUSDC"}, timeout=8)
-        if isinstance(d, dict) and "code" in d and d["code"] != 200:
-            raise Exception("Binance geo-block: " + str(d.get("msg", "")))
-        price    = float(d["lastPrice"])
-        open_p   = float(d["openPrice"])
-        high     = float(d["highPrice"])
-        low      = float(d["lowPrice"])
-        result = _normalise_ticker(price, open_p, high, low,
-                                   float(d["bidPrice"]), float(d["askPrice"]),
-                                   float(d["volume"]), float(d["priceChangePercent"]),
-                                   source="binance")
-        cache_set("ticker_data", result)
-        _working_source["ticker"] = "binance"
-        return result
-    except Exception as e:
-        pass  # fall through
-
-    # ── 2. Kraken (EURUSD — real forex spot) ─────────────────────
-    try:
-        data = _get(KRAKEN_TICKER, {"pair": KRAKEN_PAIR}, timeout=10)
-        if data.get("error"):
-            raise Exception(str(data["error"]))
-        pd = (data.get("result", {}).get("EURUSD")
-              or data.get("result", {}).get("ZEURZUSD")
-              or list(data.get("result", {}).values())[0])
-        price  = float(pd["c"][0])
-        open_p = float(pd["o"])
-        high   = float(pd["h"][0])
-        low    = float(pd["l"][0])
-        result = _normalise_ticker(price, open_p, high, low,
-                                   float(pd["b"][0]), float(pd["a"][0]),
-                                   float(pd["v"][0]),
-                                   round((price - open_p) / open_p * 100, 4),
-                                   source="kraken")
-        cache_set("ticker_data", result)
-        _working_source["ticker"] = "kraken"
-        return result
-    except Exception as e:
-        pass
-
-    # ── 3. CoinGecko (price only — last resort) ───────────────────
-    try:
-        data = _get(COINGECKO_URL,
-                    {"ids": "euro", "vs_currencies": "usd",
-                     "include_24hr_change": "true"}, timeout=10)
-        price = float(data["euro"]["usd"])
-        chg   = float(data["euro"].get("usd_24h_change", 0))
-        result = _normalise_ticker(price, price * (1 - chg/100),
-                                   price * 1.002, price * 0.998,
-                                   price - 0.00020, price + 0.00020,
-                                   0, chg, source="coingecko")
-        cache_set("ticker_data", result)
-        _working_source["ticker"] = "coingecko"
-        return result
-    except Exception as e:
-        raise Exception("All ticker sources failed")
+    mode_order = {
+        "binance": ["binance", "kraken", "coingecko"],
+        "kraken": ["kraken", "binance", "coingecko"],
+        "combined": ["binance", "kraken", "coingecko"],
+        "auto": ["binance", "kraken", "coingecko"],
+    }[source_mode]
+    loaders = {
+        "binance": _fetch_ticker_binance,
+        "kraken": _fetch_ticker_kraken,
+        "coingecko": _fetch_ticker_coingecko,
+    }
+    errors = []
+    for name in mode_order:
+        try:
+            result = loaders[name]()
+            if source_mode == "combined" and name in ("binance", "kraken"):
+                result["source"] = "combined"
+                result["source_detail"] = name
+            cache_set(f"ticker_data_{source_mode}", result)
+            _working_source["ticker"] = result.get("source_detail", name)
+            return result
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+            continue
+    raise Exception("All ticker sources failed" + (f" ({'; '.join(errors)})" if errors else ""))
 
 
 def fetch_depth():
@@ -459,52 +535,62 @@ def fetch_depth():
     then Coinbase (50 levels aggregated).
     Returns (bids, asks) where each is [[price, qty], ...].
     """
-    cached = cache_get("depth_data", ttl=900)
+    return fetch_depth_for_mode("auto")
+
+
+def fetch_depth_for_mode(source_mode="auto"):
+    source_mode = normalise_source_mode(source_mode)
+    cached = cache_get(f"depth_data_{source_mode}", ttl=900)
     if cached:
         return cached["bids"], cached["asks"], cached["source"]
 
-    # ── 1. Binance ────────────────────────────────────────────────
-    try:
-        d = _get(BINANCE_DEPTH, {"symbol": "EURUSDC", "limit": 150}, timeout=8)
-        if isinstance(d, dict) and "code" in d:
-            raise Exception("Binance geo-block")
-        bids = [[float(p), float(q)] for p, q in d["bids"]]
-        asks = [[float(p), float(q)] for p, q in d["asks"]]
-        cache_set("depth_data", {"bids": bids, "asks": asks, "source": "binance"})
-        _working_source["depth"] = "binance"
-        return bids, asks, "binance"
-    except Exception:
-        pass
+    errors = []
+    if source_mode == "combined":
+        combined_bids = []
+        combined_asks = []
+        used = []
+        for name, loader in (("binance", _fetch_depth_binance), ("kraken", _fetch_depth_kraken)):
+            try:
+                bids, asks, _ = loader()
+                combined_bids.extend(bids)
+                combined_asks.extend(asks)
+                used.append(name)
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+        if combined_bids or combined_asks:
+            bids = merge_depth_levels(combined_bids, "bid")
+            asks = merge_depth_levels(combined_asks, "ask")
+            source_label = "combined" if len(used) > 1 else (used[0] if used else "combined")
+            cache_set(f"depth_data_{source_mode}", {"bids": bids, "asks": asks, "source": source_label})
+            _working_source["depth"] = source_label
+            return bids, asks, source_label
+        try:
+            bids, asks, src = _fetch_depth_coinbase()
+            cache_set(f"depth_data_{source_mode}", {"bids": bids, "asks": asks, "source": src})
+            _working_source["depth"] = src
+            return bids, asks, src
+        except Exception as exc:
+            errors.append(f"coinbase: {exc}")
+            raise Exception("All depth sources failed" + (f" ({'; '.join(errors)})" if errors else ""))
 
-    # ── 2. Kraken (500 levels — best fallback) ────────────────────
-    try:
-        data = _get(KRAKEN_DEPTH, {"pair": KRAKEN_PAIR, "count": 150}, timeout=10)
-        if data.get("error"):
-            raise Exception(str(data["error"]))
-        pd   = (data.get("result", {}).get("EURUSD")
-                or data.get("result", {}).get("ZEURZUSD")
-                or list(data.get("result", {}).values())[0])
-        bids = [[float(p), float(q)] for p, q, _ in pd["bids"]]
-        asks = [[float(p), float(q)] for p, q, _ in pd["asks"]]
-        cache_set("depth_data", {"bids": bids, "asks": asks, "source": "kraken"})
-        _working_source["depth"] = "kraken"
-        return bids, asks, "kraken"
-    except Exception:
-        pass
+    if source_mode == "kraken":
+        order = [("kraken", _fetch_depth_kraken), ("binance", _fetch_depth_binance), ("coinbase", _fetch_depth_coinbase)]
+    elif source_mode == "binance":
+        order = [("binance", _fetch_depth_binance), ("kraken", _fetch_depth_kraken), ("coinbase", _fetch_depth_coinbase)]
+    else:
+        order = [("binance", _fetch_depth_binance), ("kraken", _fetch_depth_kraken), ("coinbase", _fetch_depth_coinbase)]
 
-    # ── 3. Coinbase (50 aggregated levels) ───────────────────────
-    try:
-        data = _get(COINBASE_DEPTH, {"product_id": "EUR-USD", "limit": 50}, timeout=10)
-        pb   = data.get("pricebook", {})
-        bids = [[float(x["price"]), float(x["size"])] for x in pb.get("bids", [])]
-        asks = [[float(x["price"]), float(x["size"])] for x in pb.get("asks", [])]
-        cache_set("depth_data", {"bids": bids, "asks": asks, "source": "coinbase"})
-        _working_source["depth"] = "coinbase"
-        return bids, asks, "coinbase"
-    except Exception:
-        pass
+    for name, loader in order:
+        try:
+            bids, asks, src = loader()
+            cache_set(f"depth_data_{source_mode}", {"bids": bids, "asks": asks, "source": src})
+            _working_source["depth"] = src
+            return bids, asks, src
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+            continue
 
-    raise Exception("All depth sources failed")
+    raise Exception("All depth sources failed" + (f" ({'; '.join(errors)})" if errors else ""))
 
 
 def _normalise_ticker(price, open_p, high, low, bid, ask, volume, change_pct, source=""):
@@ -629,8 +715,15 @@ def api_price():
     Cached 30s.
     """
     try:
-        t = fetch_ticker()
-        result = {"tickers": [t], "ts": now_utc(), "source": t.get("source")}
+        source_mode = requested_source_mode()
+        t = fetch_ticker_for_mode(source_mode)
+        result = {
+            "tickers": [t],
+            "ts": now_utc(),
+            "source": t.get("source"),
+            "source_mode": source_mode,
+            "source_detail": t.get("source_detail", t.get("source")),
+        }
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e), "tickers": []}), 502
@@ -639,10 +732,65 @@ def api_price():
 def api_ticker():
     """Alias of /api/price — used by liquidity page."""
     try:
-        t = fetch_ticker()
+        t = fetch_ticker_for_mode(requested_source_mode())
         return jsonify([t])
     except Exception as e:
         return jsonify([{"error": str(e)}]), 502
+
+
+@app.route("/api/source-status")
+def api_source_status():
+    cached = cache_get("source_status", ttl=45)
+    if cached:
+        return jsonify(cached)
+
+    status = {
+        "selected_default": "combined",
+        "sources": {
+            "binance": {"label": "Binance", "available": False, "ticker": False, "depth": False, "candles": False},
+            "kraken": {"label": "Kraken", "available": False, "ticker": False, "depth": False, "candles": False},
+            "combined": {"label": "Combined", "available": False},
+        }
+    }
+
+    try:
+        _get(BINANCE_24H, {"symbol": "EURUSDC"}, timeout=3)
+        status["sources"]["binance"]["ticker"] = True
+    except Exception:
+        pass
+    try:
+        _get(BINANCE_DEPTH, {"symbol": "EURUSDC", "limit": 20}, timeout=3)
+        status["sources"]["binance"]["depth"] = True
+    except Exception:
+        pass
+    status["sources"]["binance"]["candles"] = status["sources"]["binance"]["ticker"]
+
+    try:
+        data = _get(KRAKEN_TICKER, {"pair": KRAKEN_PAIR}, timeout=3)
+        if not data.get("error"):
+            status["sources"]["kraken"]["ticker"] = True
+    except Exception:
+        pass
+    try:
+        data = _get(KRAKEN_DEPTH, {"pair": KRAKEN_PAIR, "count": 20}, timeout=3)
+        if not data.get("error"):
+            status["sources"]["kraken"]["depth"] = True
+    except Exception:
+        pass
+    status["sources"]["kraken"]["candles"] = status["sources"]["kraken"]["ticker"]
+
+    for key in ("binance", "kraken"):
+        src = status["sources"][key]
+        src["available"] = bool(src["ticker"] or src["depth"] or src["candles"])
+    status["sources"]["combined"]["available"] = (
+        status["sources"]["binance"]["available"] or status["sources"]["kraken"]["available"]
+    )
+    status["sources"]["combined"]["members"] = [
+        key for key in ("binance", "kraken") if status["sources"][key]["available"]
+    ]
+
+    cache_set("source_status", status)
+    return jsonify(status)
 
 
 @app.route("/api/nearest_walls")
@@ -650,17 +798,18 @@ def api_nearest_walls():
     top_by_vol = int(request.args.get("top_by_vol", 30))
     n          = int(request.args.get("n", 8))
     min_gap    = float(request.args.get("min_gap", 0.0003))
-    cache_key  = f"nearest_{top_by_vol}_{n}_{min_gap}"
+    source_mode = requested_source_mode()
+    cache_key  = f"nearest_{source_mode}_{top_by_vol}_{n}_{min_gap}"
     cached     = cache_get(cache_key, ttl=900)
     if cached:
         return jsonify(cached)
     try:
         # Get mid price from ticker
-        t   = fetch_ticker()
+        t   = fetch_ticker_for_mode(source_mode)
         mid = (t["bid"] + t["ask"]) / 2
 
         # Get depth — fallback chain handles source selection
-        bids, asks, depth_source = fetch_depth()
+        bids, asks, depth_source = fetch_depth_for_mode(source_mode)
 
         # Combine and deduplicate within 0.0001
         combined = ([{"price": p, "qty": q, "side": "bid", "symbol": depth_source}
@@ -708,6 +857,7 @@ def api_nearest_walls():
             "ts":           now_utc(),
             "ticker_source": t.get("source"),
             "depth_source": depth_source,
+            "source_mode":  source_mode,
             "bid_walls":    bid_walls,
             "ask_walls":    ask_walls,
             "all_top":      top_magnets,
@@ -724,7 +874,7 @@ def api_persistent_liquidity():
     max_pips = float(request.args.get("max_pips", 150))
     limit = int(request.args.get("limit", 12))
     try:
-        t = fetch_ticker()
+        t = fetch_ticker_for_mode(requested_source_mode())
         mid = (t["bid"] + t["ask"]) / 2
         rows = [
             row_to_dict(r) for r in get_db().execute(
@@ -821,8 +971,9 @@ def delete_zone(zid):
 def api_dashboard():
     """Combined dashboard endpoint — ticker + depth. Fallback chain."""
     try:
-        t            = fetch_ticker()
-        bids, asks, depth_src = fetch_depth()
+        source_mode = requested_source_mode()
+        t            = fetch_ticker_for_mode(source_mode)
+        bids, asks, depth_src = fetch_depth_for_mode(source_mode)
         all_qty  = [q for _, q in bids + asks]
         max_qty  = max(all_qty) if all_qty else 1
         total_b  = sum(q for _, q in bids)
@@ -845,6 +996,8 @@ def api_dashboard():
             "books":   {"EURUSD": book},
             "ts":      now_utc(),
             "source":  t.get("source"),
+            "source_mode": source_mode,
+            "source_detail": t.get("source_detail", t.get("source")),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -853,33 +1006,18 @@ def api_candles():
     """Candles — Binance primary, Kraken fallback (OHLC)."""
     interval = request.args.get("interval", "5m")
     limit    = int(request.args.get("limit", 80))
-    cache_key = f"candles_{interval}"
+    source_mode = requested_source_mode()
+    cache_key = f"candles_{source_mode}_{interval}"
     cached    = cache_get(cache_key, ttl=15 if interval in ("1m","5m") else 60)
     if cached:
         return jsonify(cached)
-    # Binance
-    try:
-        raw = _get(BINANCE_KLINES, {"symbol": "EURUSDC", "interval": interval, "limit": limit})
-        if isinstance(raw, dict) and "code" in raw:
-            raise Exception("geo-block")
-        candles = [{"t": c[0], "o": float(c[1]), "h": float(c[2]),
-                    "l": float(c[3]), "c": float(c[4]), "v": float(c[5])} for c in raw]
-        cache_set(cache_key, candles)
-        return jsonify(candles)
-    except Exception:
-        pass
-    # Kraken OHLC — map interval (Kraken uses minutes: 1,5,15,30,60,240,1440)
     interval_map = {"1m":1,"5m":5,"15m":15,"30m":30,"1h":60,"4h":240,"1d":1440}
     k_interval = interval_map.get(interval, 5)
     try:
-        data = _get(KRAKEN_OHLC, {"pair": KRAKEN_PAIR, "interval": k_interval})
-        if data.get("error"):
-            raise Exception(str(data["error"]))
-        pd = list(data.get("result", {}).values())[0]
-        # Kraken OHLC: [time, open, high, low, close, vwap, volume, count]
-        candles = [{"t": int(c[0])*1000, "o": float(c[1]), "h": float(c[2]),
-                    "l": float(c[3]), "c": float(c[4]), "v": float(c[6])}
-                   for c in pd[-limit:]]
+        candles_src = get_ohlc_for_mode(k_interval, limit=limit, source_mode=source_mode)
+        candles = [{"t": int(c["t"])*1000, "o": float(c["o"]), "h": float(c["h"]),
+                    "l": float(c["l"]), "c": float(c["c"]), "v": float(c["v"])}
+                   for c in candles_src]
         cache_set(cache_key, candles)
         return jsonify(candles)
     except Exception as e:
@@ -909,9 +1047,10 @@ def api_zones_walls():
     tolerance = float(request.args.get("tolerance", "0.0010"))
     db        = get_db()
     try:
-        t            = fetch_ticker()
+        source_mode  = requested_source_mode()
+        t            = fetch_ticker_for_mode(source_mode)
         mid          = (t["bid"] + t["ask"]) / 2
-        bids, asks, depth_src = fetch_depth()
+        bids, asks, depth_src = fetch_depth_for_mode(source_mode)
 
         all_levels = ([{"price": p, "qty": q, "side": "bid"} for p, q in bids] +
                       [{"price": p, "qty": q, "side": "ask"} for p, q in asks])
@@ -1003,14 +1142,15 @@ def api_liquidity_zones():
     min_gap  = float(request.args.get("min_gap",  0.001))
     side     = request.args.get("side", "all").lower()
     lim      = int(request.args.get("limit", 300))
-    cache_key = f"liq_zones_{min_qty}_{min_gap}_{side}"
+    source_mode = requested_source_mode()
+    cache_key = f"liq_zones_{source_mode}_{min_qty}_{min_gap}_{side}"
     cached    = cache_get(cache_key, ttl=900)
     if cached:
         return jsonify(cached)
     try:
-        t           = fetch_ticker()
+        t           = fetch_ticker_for_mode(source_mode)
         mid         = (t["bid"] + t["ask"]) / 2
-        bids, asks, depth_source = fetch_depth()
+        bids, asks, depth_source = fetch_depth_for_mode(source_mode)
 
         combined = ([{"price": p, "qty": q, "side": "bid", "symbol": depth_source}
                      for p, q in bids] +
@@ -1058,6 +1198,7 @@ def api_liquidity_zones():
             "min_gap":      min_gap,
             "pulled_at":    now_utc(),
             "source":       depth_source,
+            "source_mode":  source_mode,
             "levels":       result,
         }
         cache_set(cache_key, out)
@@ -1405,6 +1546,62 @@ def get_kraken_ohlc(interval_min, limit=2):
     return result
 
 
+def get_binance_ohlc(interval_min, limit=2):
+    interval_map = {
+        1: "1m",
+        5: "5m",
+        15: "15m",
+        30: "30m",
+        60: "1h",
+        240: "4h",
+        1440: "1d",
+        10080: "1w",
+    }
+    interval = interval_map.get(interval_min)
+    if not interval:
+        raise Exception(f"Unsupported Binance interval: {interval_min}")
+    fetch_limit = limit if limit and limit > 0 else 500
+    cache_key = f"binance_ohlc_{interval_min}_{limit}"
+    ttl = 60 if interval_min <= 15 else 300 if interval_min <= 60 else 900
+    cached = cache_get(cache_key, ttl)
+    if cached:
+        return cached
+    raw = _get(BINANCE_KLINES, {"symbol": "EURUSDC", "interval": interval, "limit": fetch_limit})
+    if isinstance(raw, dict) and "code" in raw:
+        raise Exception(raw.get("msg", "Binance klines unavailable"))
+    candles = [{
+        "t": int(c[0]) // 1000,
+        "o": float(c[1]),
+        "h": float(c[2]),
+        "l": float(c[3]),
+        "c": float(c[4]),
+        "v": float(c[5]),
+    } for c in raw]
+    result = candles[-limit:] if limit else candles
+    cache_set(cache_key, result)
+    return result
+
+
+def get_ohlc_for_mode(interval_min, limit=2, source_mode="auto"):
+    source_mode = normalise_source_mode(source_mode)
+    if source_mode == "kraken":
+        return get_kraken_ohlc(interval_min, limit=limit)
+    if source_mode == "binance":
+        try:
+            return get_binance_ohlc(interval_min, limit=limit)
+        except Exception:
+            return get_kraken_ohlc(interval_min, limit=limit)
+    if source_mode == "combined":
+        try:
+            return get_binance_ohlc(interval_min, limit=limit)
+        except Exception:
+            return get_kraken_ohlc(interval_min, limit=limit)
+    try:
+        return get_binance_ohlc(interval_min, limit=limit)
+    except Exception:
+        return get_kraken_ohlc(interval_min, limit=limit)
+
+
 @app.route("/api/levels")
 def api_levels():
     """
@@ -1430,20 +1627,21 @@ def api_levels():
         return jsonify({"error": f"Unknown tf. Use: {list(tf_map)}"}), 400
 
     interval_min, tf_label = tf_map[tf]
-    cache_key = f"levels_{tf}"
+    source_mode = requested_source_mode()
+    cache_key = f"levels_{source_mode}_{tf}"
     ttl = 60 if interval_min <= 15 else 300 if interval_min <= 60 else 900
     cached = cache_get(cache_key, ttl)
     if cached:
         return jsonify(cached)
 
     try:
-        ticker  = fetch_ticker()
+        ticker  = fetch_ticker_for_mode(source_mode)
         price   = ticker["price"]
 
         # Get enough candles:
         # - 2 for pivot (we use the previous completed one, index -2)
         # - 200 for VWAP (full session)
-        candles_all = get_kraken_ohlc(interval_min, limit=0)  # all available
+        candles_all = get_ohlc_for_mode(interval_min, limit=0, source_mode=source_mode)
         if len(candles_all) < 2:
             return jsonify({"error": "Not enough candle data"}), 502
 
@@ -1507,6 +1705,8 @@ def api_levels():
             "bollinger":   rnd(bollinger) if bollinger else None,
             "donchian":    rnd(donchian) if donchian else None,
             "source":      ticker.get("source"),
+            "source_mode": source_mode,
+            "source_detail": ticker.get("source_detail", ticker.get("source")),
             "ts":          now_utc(),
         }
         cache_set(cache_key, result)
@@ -1944,14 +2144,15 @@ def api_depth_profile():
     """
     bucket_pips = float(request.args.get("bucket_pips", 5))
     window_pips = float(request.args.get("window_pips", 80))
-    cache_key   = f"depth_profile_{bucket_pips}_{window_pips}"
+    source_mode = requested_source_mode()
+    cache_key   = f"depth_profile_{source_mode}_{bucket_pips}_{window_pips}"
     cached      = cache_get(cache_key, ttl=900)
     if cached:
         return jsonify(cached)
     try:
-        t           = fetch_ticker()
+        t           = fetch_ticker_for_mode(source_mode)
         mid         = (t["bid"] + t["ask"]) / 2
-        bids, asks, src = fetch_depth()
+        bids, asks, src = fetch_depth_for_mode(source_mode)
 
         bucket_size = bucket_pips * 0.0001
         window      = window_pips * 0.0001
@@ -2002,6 +2203,7 @@ def api_depth_profile():
             "bucket_pips": bucket_pips,
             "window_pips": window_pips,
             "source":      src,
+            "source_mode": source_mode,
             "ts":          now_utc(),
             "total_bid":   round(total_bid, 2),
             "total_ask":   round(total_ask, 2),

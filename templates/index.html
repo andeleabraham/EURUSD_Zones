@@ -129,53 +129,117 @@ function fmt(n,d){ return parseFloat(n).toFixed(d ?? 4); }
 function fmtK(n){ return n >= 1000 ? (n/1000).toFixed(1) + 'K' : parseFloat(n).toFixed(1); }
 const C={bid:'#22c55e',ask:'#ef4444',warn:'#f59e0b',acc:'#3de8a0',grid:'#1c2436',txt:'#485878',surf:'#111620'};
 
+function updatePriceStrip(t, sourceOverride) {
+  if (!t) return;
+  const up = prevPx !== null ? t.price >= prevPx : t.change_pct >= 0;
+  prevPx = t.price;
+  const el = document.getElementById('px-main');
+  el.textContent = fmt(t.price,5);
+  el.className = 'px-val ' + (up ? 'up' : 'dn');
+  document.getElementById('sprd').textContent = fmt(t.spread,5);
+  document.getElementById('hi').textContent = fmt(t.high,4);
+  document.getElementById('lo').textContent = fmt(t.low,4);
+  document.getElementById('opn').textContent = fmt(t.open,4);
+  const chgEl = document.getElementById('chg');
+  chgEl.textContent = (t.change_pct >= 0 ? '+' : '') + t.change_pct.toFixed(2) + '%';
+  chgEl.style.color = t.change_pct >= 0 ? 'var(--bid)' : 'var(--ask)';
+  trendCtx = t;
+  const chip = document.getElementById('trend-chip');
+  chip.className = 'trend-chip ' + t.trend;
+  document.getElementById('trend-lbl').textContent = t.trend === 'bullish' ? `Bullish from open (+${t.trend_pips} pips)` : t.trend === 'bearish' ? `Bearish from open (-${t.trend_pips} pips)` : 'Flat from open';
+  document.getElementById('td-pips').innerHTML = `Range today: <b>${t.day_range_pips} pips</b>`;
+  document.getElementById('td-high').innerHTML = `From high: <b>${t.pips_from_high}p</b>`;
+  document.getElementById('td-low').innerHTML = `From low: <b>${t.pips_from_low}p</b>`;
+  document.getElementById('range-cur').style.left = t.range_position + '%';
+  document.getElementById('range-pct').textContent = t.range_position + '%';
+  document.getElementById('px-ts').textContent = 'updated ' + new Date().toUTCString().slice(17,25) + ' UTC';
+  document.getElementById('src-badge').textContent = 'src: ' + (sourceOverride || t.source || '-');
+  midPrice = (t.bid + t.ask) / 2;
+  document.getElementById('chart-mid').textContent = 'mid ' + fmt(midPrice,5);
+  setLive(true);
+}
+
+function buildWallDataFromBook(book, ticker) {
+  if (!book || !ticker) return null;
+  const mid = (ticker.bid + ticker.ask) / 2;
+  const topByVol = 30;
+  const limit = 8;
+  const minGap = 0.0003;
+  const combined = [
+    ...((book.bids_by_size || []).map(([price, qty]) => ({price, qty, side: 'bid', symbol: book.source || ticker.source}))),
+    ...((book.asks_by_size || []).map(([price, qty]) => ({price, qty, side: 'ask', symbol: book.source || ticker.source}))),
+  ].filter(lv => lv.price != null && lv.qty != null);
+
+  combined.sort((a, b) => a.price - b.price);
+  const deduped = [];
+  combined.forEach((lv) => {
+    const last = deduped.length ? deduped[deduped.length - 1] : null;
+    if (last && Math.abs(lv.price - last.price) < 0.0001 && lv.side === last.side) {
+      if (lv.qty > last.qty) deduped[deduped.length - 1] = lv;
+    } else {
+      deduped.push({...lv});
+    }
+  });
+
+  deduped.sort((a, b) => b.qty - a.qty);
+  const allTop = deduped.slice(0, topByVol);
+  const maxQty = allTop.length ? allTop[0].qty : 1;
+  allTop.forEach((lv) => {
+    lv.dist = Math.abs(lv.price - mid);
+    lv.pips = Math.round((lv.dist / 0.0001) * 10) / 10;
+    lv.dist_pct = mid ? Math.round((lv.dist / mid) * 1000000) / 10000 : 0;
+    lv.is_wall = lv.qty >= maxQty * 0.35;
+    lv.bar_pct = Math.round((lv.qty / maxQty) * 1000) / 10;
+  });
+
+  const bidWalls = allTop
+    .filter(lv => lv.side === 'bid' && lv.price < mid && lv.dist >= minGap)
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, limit);
+  const askWalls = allTop
+    .filter(lv => lv.side === 'ask' && lv.price > mid && lv.dist >= minGap)
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, limit);
+
+  return {
+    mid,
+    ticker_source: ticker.source,
+    depth_source: book.source || ticker.source,
+    bid_walls: bidWalls,
+    ask_walls: askWalls,
+    all_top: allTop
+  };
+}
+
 async function loadPrice() {
   try {
     const res = await fetch('/api/price');
     const data = await res.json();
     const t = (data.tickers || [])[0];
     if (!t || t.error) return;
-    const up = prevPx !== null ? t.price >= prevPx : t.change_pct >= 0;
-    prevPx = t.price;
-    const el = document.getElementById('px-main');
-    el.textContent = fmt(t.price,5);
-    el.className = 'px-val ' + (up ? 'up' : 'dn');
-    document.getElementById('sprd').textContent = fmt(t.spread,5);
-    document.getElementById('hi').textContent = fmt(t.high,4);
-    document.getElementById('lo').textContent = fmt(t.low,4);
-    document.getElementById('opn').textContent = fmt(t.open,4);
-    const chgEl = document.getElementById('chg');
-    chgEl.textContent = (t.change_pct >= 0 ? '+' : '') + t.change_pct.toFixed(2) + '%';
-    chgEl.style.color = t.change_pct >= 0 ? 'var(--bid)' : 'var(--ask)';
-    trendCtx = t;
-    const chip = document.getElementById('trend-chip');
-    chip.className = 'trend-chip ' + t.trend;
-    document.getElementById('trend-lbl').textContent = t.trend === 'bullish' ? `Bullish from open (+${t.trend_pips} pips)` : t.trend === 'bearish' ? `Bearish from open (-${t.trend_pips} pips)` : 'Flat from open';
-    document.getElementById('td-pips').innerHTML = `Range today: <b>${t.day_range_pips} pips</b>`;
-    document.getElementById('td-high').innerHTML = `From high: <b>${t.pips_from_high}p</b>`;
-    document.getElementById('td-low').innerHTML = `From low: <b>${t.pips_from_low}p</b>`;
-    document.getElementById('range-cur').style.left = t.range_position + '%';
-    document.getElementById('range-pct').textContent = t.range_position + '%';
-    document.getElementById('px-ts').textContent = 'updated ' + new Date().toUTCString().slice(17,25) + ' UTC';
-    document.getElementById('src-badge').textContent = 'src: ' + (data.source || t.source || '-');
-    midPrice = (t.bid + t.ask) / 2;
-    document.getElementById('chart-mid').textContent = 'mid ' + fmt(midPrice,5);
-    setLive(true);
+    updatePriceStrip(t, data.source || t.source || '-');
     if (wallData) { drawChart(); renderPanels(); }
   } catch(e) { setLive(false); }
 }
 
-async function loadWalls() {
+async function loadDashboard() {
   try {
-    const res = await fetch('/api/nearest_walls?top_by_vol=30&n=8&min_gap=0.0003');
+    const res = await fetch('/api/dashboard');
     const data = await res.json();
-    if (data.error) return;
-    wallData = data;
-    if (data.mid) midPrice = data.mid;
+    if (data.error) throw new Error(data.error);
+    const t = (data.tickers || [])[0];
+    const book = data.books && data.books.EURUSD;
+    if (!t || !book) return;
+    updatePriceStrip(t, book.source || data.source || t.source || '-');
+    wallData = buildWallDataFromBook(book, t);
+    if (!wallData) return;
+    midPrice = wallData.mid;
     document.getElementById('chart-mid').textContent = 'mid ' + fmt(midPrice,5);
     drawChart();
     renderPanels();
-  } catch(e) {}
+  } catch(e) {
+    setLive(false);
+  }
 }
 
 function drawChart() {
@@ -207,10 +271,10 @@ function renderPanels() {
   document.getElementById('panel-asks').innerHTML = rows(wallData.ask_walls || [], 'ask');
 }
 
-async function init(){ await loadPrice(); await loadWalls(); }
+async function init(){ await loadDashboard(); }
 init();
 setInterval(loadPrice, 5*60*1000);
-setInterval(loadWalls, 15*60*1000);
+setInterval(loadDashboard, 15*60*1000);
 window.addEventListener('resize', ()=>{ if(wallData) drawChart(); });
 </script>
 {% endblock %}

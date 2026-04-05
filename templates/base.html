@@ -61,6 +61,10 @@ nav a.active{color:var(--acc);background:var(--surf2)}
 .mobile-nav{display:none}
 
 .live-chip{display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+.source-chip{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.source-chip label{font-size:.64rem;color:var(--muted);font-family:'DM Mono',monospace;white-space:nowrap}
+.source-select{background:var(--surf);border:1px solid var(--border2);color:var(--text);border-radius:var(--r);padding:.32rem .55rem;font-family:'DM Mono',monospace;font-size:.72rem;min-width:118px}
+.source-note{font-size:.62rem;color:var(--muted);font-family:'DM Mono',monospace}
 .ldot{width:6px;height:6px;border-radius:50%;background:var(--acc);box-shadow:0 0 5px var(--acc);animation:blink 2s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
@@ -88,6 +92,7 @@ footer{padding:.9rem 1.5rem;text-align:center;color:var(--faint);font-size:.7rem
   header{height:auto;min-height:52px;flex-wrap:wrap;padding:.7rem 1rem}
   nav{display:none}
   .live-chip{margin-left:auto}
+  .source-chip{order:3;width:100%;justify-content:flex-start}
   .nav-toggle{display:inline-flex}
   .mobile-nav{display:none;width:100%;padding-top:.4rem}
   .mobile-nav.open{display:block}
@@ -132,6 +137,15 @@ footer{padding:.9rem 1.5rem;text-align:center;color:var(--faint);font-size:.7rem
   <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="mobile-nav">
     <span></span>
   </button>
+  <div class="source-chip">
+    <label for="source-mode">Source</label>
+    <select id="source-mode" class="source-select">
+      <option value="combined">Combined</option>
+      <option value="binance">Binance</option>
+      <option value="kraken">Kraken</option>
+    </select>
+    <span class="source-note" id="source-note">checking…</span>
+  </div>
   <div class="live-chip"><div class="ldot" id="ldot"></div><span id="ltxt">connecting</span></div>
   <div class="mobile-nav" id="mobile-nav">
     <div class="nav-links">
@@ -169,6 +183,67 @@ function fmt(n,d){if(n===null||n===undefined||isNaN(n))return'—';return parseF
 function fmtK(n){if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return parseFloat(n).toFixed(2)}
 function pct(price,ref){const d=((price-ref)/ref*100);return(d>=0?'+':'')+d.toFixed(3)+'%'}
 function timeAgo(s){const d=new Date(s+'Z'),now=new Date(),m=Math.floor((now-d)/60000);if(m<1)return'just now';if(m<60)return m+'m ago';return Math.floor(m/60)+'h ago'}
+const SOURCE_MODE_KEY='liquidscanSourceMode';
+function getSourceMode(){return localStorage.getItem(SOURCE_MODE_KEY)||'combined'}
+function setSourceMode(mode){localStorage.setItem(SOURCE_MODE_KEY,mode)}
+async function initSourceMode(){
+  const select=document.getElementById('source-mode');
+  const note=document.getElementById('source-note');
+  if(!select||!note)return;
+  let status=null;
+  try{
+    const res=await fetch('/api/source-status');
+    status=await res.json();
+  }catch(e){}
+  const preferred=getSourceMode();
+  const sources=status?.sources||{};
+  ['combined','binance','kraken'].forEach((key)=>{
+    const opt=select.querySelector(`option[value="${key}"]`);
+    if(!opt)return;
+    const available=key==='combined' ? (sources.combined?.available ?? true) : (sources[key]?.available ?? true);
+    opt.disabled=!available;
+    if(key==='combined'&&sources.combined?.members?.length){
+      opt.textContent=`Combined (${sources.combined.members.join('+')})`;
+    }else{
+      opt.textContent=key.charAt(0).toUpperCase()+key.slice(1);
+    }
+  });
+  let chosen=preferred;
+  if(select.querySelector(`option[value="${chosen}"]`)?.disabled){
+    chosen = status?.selected_default || 'combined';
+    if(select.querySelector(`option[value="${chosen}"]`)?.disabled){
+      chosen = ['combined','binance','kraken'].find((key)=>!select.querySelector(`option[value="${key}"]`)?.disabled) || 'combined';
+    }
+  }
+  select.value=chosen;
+  setSourceMode(chosen);
+  if(chosen==='combined'){
+    const members=sources.combined?.members||[];
+    note.textContent=members.length?`using ${members.join(' + ')}`:'combined fallback';
+  }else{
+    const src=sources[chosen];
+    note.textContent=src?.available?'available':'fallback if unavailable';
+  }
+  select.addEventListener('change',()=>{
+    setSourceMode(select.value);
+    location.reload();
+  });
+}
+const nativeFetch=window.fetch.bind(window);
+window.fetch=function(resource, init){
+  try{
+    const url=new URL(typeof resource==='string'?resource:resource.url, window.location.origin);
+    if(url.origin===window.location.origin&&url.pathname.startsWith('/api/')&&!url.searchParams.has('source_mode')){
+      url.searchParams.set('source_mode', getSourceMode());
+      if(typeof resource==='string'){
+        resource=url.toString();
+      }else{
+        resource=new Request(url.toString(), resource);
+      }
+    }
+  }catch(e){}
+  return nativeFetch(resource, init);
+}
 const navToggle=document.getElementById('nav-toggle');
 const mobileNav=document.getElementById('mobile-nav');
 if(navToggle&&mobileNav){
@@ -177,6 +252,7 @@ if(navToggle&&mobileNav){
     navToggle.setAttribute('aria-expanded',open?'true':'false');
   });
 }
+initSourceMode();
 </script>
 {% block scripts %}{% endblock %}
 </body>
