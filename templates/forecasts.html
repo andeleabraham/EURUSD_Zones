@@ -48,6 +48,10 @@ td{color:var(--text)}
 {% set calendar_variants = payload.get('calendar_variants', []) %}
 {% set models = payload.get('simulation_models', []) %}
 {% set dxy = payload.get('dxy_context', {}) %}
+{% set imbalance_summary = payload.get('imbalance_summary', {}) %}
+{% set imbalance_zones = payload.get('imbalance_zones', []) %}
+{% set imbalance_context = payload.get('imbalance_context_by_horizon', {}) %}
+{% set session_imbalance_summary = payload.get('session_imbalance_summary', []) %}
 {% set integrity = report.get('integrity', {}) %}
 
 <div class="stack">
@@ -98,6 +102,7 @@ td{color:var(--text)}
             <th>Support</th>
             <th>Resistance</th>
             <th>RSI</th>
+            <th>Imbalance</th>
           </tr>
         </thead>
         <tbody>
@@ -112,11 +117,109 @@ td{color:var(--text)}
             <td>{{ row.get('support', 'N/A') }}</td>
             <td>{{ row.get('resistance', 'N/A') }}</td>
             <td>{{ row.get('rsi', 'N/A') }}</td>
+            <td>{{ row.get('imbalance_note', 'N/A') }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+  </div>
+
+  <div class="hero-grid">
+    <div class="card">
+      <div class="sec-lbl">Imbalance Context</div>
+      {% if imbalance_summary %}
+      <div class="triple">
+        {% for key, label in [('daily', 'Daily'), ('weekly', 'Weekly'), ('monthly', 'Monthly')] %}
+        {% set row = imbalance_summary.get(key, {}) %}
+        {% set ctx = imbalance_context.get(key, {}) %}
+        <div class="metric">
+          <div class="metric-label">{{ label }}</div>
+          <div class="metric-value">{{ row.get('adjustment', 'N/A') }}</div>
+          <div class="metric-sub">{{ row.get('note', 'No imbalance context pushed.') }}</div>
+          <div class="metric-sub">Bullish below: {{ ctx.get('nearest_bullish_imbalance', 'N/A') }}</div>
+          <div class="metric-sub">Bearish above: {{ ctx.get('nearest_bearish_imbalance', 'N/A') }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">No imbalance summary was pushed with this report.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="sec-lbl">Session Imbalance Summary</div>
+      {% if session_imbalance_summary %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>Type</th>
+              <th>Side</th>
+              <th>Status</th>
+              <th>Distance</th>
+              <th>Zone</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in session_imbalance_summary %}
+            <tr>
+              <td>{{ row.get('session', 'N/A') }}</td>
+              <td>{{ row.get('type', 'N/A') }}</td>
+              <td>{{ row.get('side', 'N/A') }}</td>
+              <td>{{ row.get('status', 'N/A') }}</td>
+              <td>{{ row.get('distance_from_price_pips', 'N/A') }}</td>
+              <td>{{ row.get('lower_bound', 'N/A') }} to {{ row.get('upper_bound', 'N/A') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">No session imbalance summary was pushed with this report.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-lbl">Imbalance Zones</div>
+    {% if imbalance_zones %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Timeframe</th>
+            <th>Type</th>
+            <th>Side</th>
+            <th>Status</th>
+            <th>Lower Bound</th>
+            <th>Upper Bound</th>
+            <th>Size (pips)</th>
+            <th>Distance (pips)</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in imbalance_zones %}
+          <tr>
+            <td>{{ row.get('timeframe', 'N/A') }}</td>
+            <td>{{ row.get('type', 'N/A') }}</td>
+            <td>{{ row.get('side', 'N/A') }}</td>
+            <td>{{ row.get('status', 'N/A') }}</td>
+            <td>{{ row.get('lower_bound', 'N/A') }}</td>
+            <td>{{ row.get('upper_bound', 'N/A') }}</td>
+            <td>{{ row.get('size_pips', 'N/A') }}</td>
+            <td>{{ row.get('distance_from_price_pips', 'N/A') }}</td>
+            <td>{{ row.get('created_at', 'N/A') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">No imbalance zones were pushed with this report.</div>
+    {% endif %}
   </div>
 
   <div class="card">
