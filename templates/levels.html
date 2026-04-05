@@ -42,6 +42,9 @@
 .c-vwap .lr-price{color:#a78bfa}
 .c-fib .lr-price{color:var(--warn)}
 .c-murray .lr-price{color:var(--acc2)}
+.c-ma .lr-price{color:#60a5fa}
+.c-boll .lr-price{color:#f472b6}
+.c-donchian .lr-price{color:#34d399}
 .near-tag{font-size:.58rem;padding:1px 4px;border-radius:3px;font-weight:600;margin-left:3px;vertical-align:middle}
 .near-res{background:var(--ask-dim);color:var(--ask);border:1px solid #ef444430}
 .near-sup{background:var(--bid-dim);color:var(--bid);border:1px solid #22c55e30}
@@ -80,6 +83,9 @@
     <option value="fib">Fibonacci only</option>
     <option value="vwap">VWAP only</option>
     <option value="murray">Murray only</option>
+    <option value="ma">Moving averages only</option>
+    <option value="boll">Bollinger only</option>
+    <option value="donchian">Donchian only</option>
   </select>
 </div>
 
@@ -88,6 +94,9 @@
   <span class="cur" id="cur-px">-</span>
   <span>TF: <b id="tf-lbl">Daily</b></span>
   <span>RSI(14): <b id="rsi-val">-</b> <b id="rsi-state">-</b></span>
+  <span>MAs: <b id="ma-strip">-</b></span>
+  <span>BB(20,2): <b id="bb-strip">-</b></span>
+  <span>Donchian(20): <b id="don-strip">-</b></span>
   <span>Prev candle H:<b id="pc-h">-</b> L:<b id="pc-l">-</b> C:<b id="pc-c">-</b></span>
   <span>Murray range:<b id="murray-range">-</b></span>
   <span style="margin-left:auto">Source: <b id="src-lbl">-</b> · <b id="ts-lbl">-</b></span>
@@ -124,7 +133,10 @@ const familyMap = {
   woodie: 'Woodie',
   fib: 'Fibonacci',
   vwap: 'VWAP',
-  murray: 'Murray'
+  murray: 'Murray',
+  ma: 'Moving Averages',
+  boll: 'Bollinger',
+  donchian: 'Donchian'
 };
 
 function fmt(n,d){ return n!=null && !isNaN(n) ? parseFloat(n).toFixed(d ?? 5) : '-'; }
@@ -183,6 +195,15 @@ function render(d) {
   document.getElementById('tf-lbl').textContent = d.tf_label;
   document.getElementById('rsi-val').textContent = d.rsi && d.rsi.value != null ? fmt(d.rsi.value,2) : '-';
   document.getElementById('rsi-state').textContent = d.rsi && d.rsi.state ? d.rsi.state.replaceAll('_',' ') : '-';
+  document.getElementById('ma-strip').textContent = d.moving_averages
+    ? `E9 ${fmt(d.moving_averages.ema_9,5)} · E21 ${fmt(d.moving_averages.ema_21,5)} · S50 ${fmt(d.moving_averages.sma_50,5)} · S200 ${fmt(d.moving_averages.sma_200,5)}`
+    : '-';
+  document.getElementById('bb-strip').textContent = d.bollinger
+    ? `${fmt(d.bollinger.lower,5)} / ${fmt(d.bollinger.middle,5)} / ${fmt(d.bollinger.upper,5)}`
+    : '-';
+  document.getElementById('don-strip').textContent = d.donchian
+    ? `${fmt(d.donchian.lower,5)} / ${fmt(d.donchian.middle,5)} / ${fmt(d.donchian.upper,5)}`
+    : '-';
   document.getElementById('pc-h').textContent = fmt(d.prev_candle.h,5);
   document.getElementById('pc-l').textContent = fmt(d.prev_candle.l,5);
   document.getElementById('pc-c').textContent = fmt(d.prev_candle.c,5);
@@ -225,6 +246,22 @@ function collectAllLevels(d, price) {
     addLvl('V+2σ', d.vwap.upper_2, 'res', 'vwap');
     addLvl('V-1σ', d.vwap.lower_1, 'sup', 'vwap');
     addLvl('V-2σ', d.vwap.lower_2, 'sup', 'vwap');
+  }
+  if (d.moving_averages) {
+    addLvl('EMA 9', d.moving_averages.ema_9, d.moving_averages.ema_9 > price ? 'res' : d.moving_averages.ema_9 < price ? 'sup' : 'pp', 'ma');
+    addLvl('EMA 21', d.moving_averages.ema_21, d.moving_averages.ema_21 > price ? 'res' : d.moving_averages.ema_21 < price ? 'sup' : 'pp', 'ma');
+    addLvl('SMA 50', d.moving_averages.sma_50, d.moving_averages.sma_50 > price ? 'res' : d.moving_averages.sma_50 < price ? 'sup' : 'pp', 'ma');
+    addLvl('SMA 200', d.moving_averages.sma_200, d.moving_averages.sma_200 > price ? 'res' : d.moving_averages.sma_200 < price ? 'sup' : 'pp', 'ma');
+  }
+  if (d.bollinger) {
+    addLvl('BB Upper', d.bollinger.upper, 'res', 'boll');
+    addLvl('BB Mid', d.bollinger.middle, 'pp', 'boll');
+    addLvl('BB Lower', d.bollinger.lower, 'sup', 'boll');
+  }
+  if (d.donchian) {
+    addLvl('Don Upper', d.donchian.upper, 'res', 'donchian');
+    addLvl('Don Mid', d.donchian.middle, 'pp', 'donchian');
+    addLvl('Don Lower', d.donchian.lower, 'sup', 'donchian');
   }
   if (d.murray && d.murray.levels) {
     Object.entries(d.murray.levels).forEach(([k,v]) => addLvl(k.split('—')[0].trim(), v, v > price ? 'res' : v < price ? 'sup' : 'pp', 'murray'));
@@ -306,6 +343,36 @@ function renderCards(d, price) {
     }
     cards.push(cardTemplate('VWAP bands', 'Volume weighted mean and deviations', rows));
   }
+  if (familyFilter === 'all' || familyFilter === 'ma') {
+    let rows = '';
+    if (d.moving_averages) {
+      rows += levelRow('EMA 9', d.moving_averages.ema_9, price, 'c-ma');
+      rows += levelRow('EMA 21', d.moving_averages.ema_21, price, 'c-ma');
+      rows += levelRow('SMA 50', d.moving_averages.sma_50, price, 'c-ma');
+      rows += levelRow('SMA 200', d.moving_averages.sma_200, price, 'c-ma');
+    }
+    cards.push(cardTemplate('Moving averages', 'EMA 9, EMA 21, SMA 50, SMA 200', rows));
+  }
+  if (familyFilter === 'all' || familyFilter === 'boll') {
+    let rows = '';
+    if (d.bollinger) {
+      rows += levelRow('BB Upper', d.bollinger.upper, price, 'c-boll');
+      rows += levelRow('BB Mid', d.bollinger.middle, price, 'c-boll');
+      rows += levelRow('BB Lower', d.bollinger.lower, price, 'c-boll');
+    }
+    const bbSubtitle = d.bollinger ? `Width ${fmt(d.bollinger.width_pips,1)}p` : '20-period, 2σ';
+    cards.push(cardTemplate('Bollinger bands', bbSubtitle, rows));
+  }
+  if (familyFilter === 'all' || familyFilter === 'donchian') {
+    let rows = '';
+    if (d.donchian) {
+      rows += levelRow('Don Upper', d.donchian.upper, price, 'c-donchian');
+      rows += levelRow('Don Mid', d.donchian.middle, price, 'c-donchian');
+      rows += levelRow('Don Lower', d.donchian.lower, price, 'c-donchian');
+    }
+    const donSubtitle = d.donchian ? `Width ${fmt(d.donchian.width_pips,1)}p` : '20-period channel';
+    cards.push(cardTemplate('Donchian channel', donSubtitle, rows));
+  }
   if (familyFilter === 'all' || familyFilter === 'murray') {
     let rows = '';
     if (d.murray && d.murray.levels) {
@@ -353,7 +420,7 @@ function drawChart(price, allLevels) {
     ctx.fillText(fmt(p,4), PL - 6, y + 3.5);
   }
 
-  const srcColors = {classic:'#ef4444', cam:'#f59e0b', woodie:'#fb923c', fib:'#eab308', vwap:'#a78bfa', murray:'#2bc4e8'};
+  const srcColors = {classic:'#ef4444', cam:'#f59e0b', woodie:'#fb923c', fib:'#eab308', vwap:'#a78bfa', murray:'#2bc4e8', ma:'#60a5fa', boll:'#f472b6', donchian:'#34d399'};
   visLevels.forEach(lv => {
     const y = yOf(lv.price);
     const col = srcColors[lv.source] || '#8b9ab8';

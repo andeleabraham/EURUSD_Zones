@@ -1316,6 +1316,71 @@ def calc_rsi(candles, period=14):
         "bias_hint": bias,
     }
 
+def calc_sma(candles, period):
+    if not candles or len(candles) < period:
+        return None
+    closes = [float(c["c"]) for c in candles if c.get("c") is not None]
+    if len(closes) < period:
+        return None
+    return round(sum(closes[-period:]) / period, 5)
+
+def calc_ema(candles, period):
+    if not candles or len(candles) < period:
+        return None
+    closes = [float(c["c"]) for c in candles if c.get("c") is not None]
+    if len(closes) < period:
+        return None
+    multiplier = 2 / (period + 1)
+    ema = sum(closes[:period]) / period
+    for close in closes[period:]:
+        ema = ((close - ema) * multiplier) + ema
+    return round(ema, 5)
+
+def calc_moving_averages(candles):
+    return {
+        "ema_9": calc_ema(candles, 9),
+        "ema_21": calc_ema(candles, 21),
+        "sma_50": calc_sma(candles, 50),
+        "sma_200": calc_sma(candles, 200),
+    }
+
+def calc_bollinger_bands(candles, period=20, std_mult=2):
+    if not candles or len(candles) < period:
+        return None
+    closes = [float(c["c"]) for c in candles if c.get("c") is not None]
+    if len(closes) < period:
+        return None
+    window = closes[-period:]
+    mean = sum(window) / period
+    variance = sum((x - mean) ** 2 for x in window) / period
+    std = variance ** 0.5
+    return {
+        "period": period,
+        "std_mult": std_mult,
+        "middle": round(mean, 5),
+        "upper": round(mean + (std * std_mult), 5),
+        "lower": round(mean - (std * std_mult), 5),
+        "width_pips": round(((2 * std * std_mult) / 0.0001), 1),
+    }
+
+def calc_donchian_channel(candles, period=20):
+    if not candles or len(candles) < period:
+        return None
+    highs = [float(c["h"]) for c in candles if c.get("h") is not None]
+    lows = [float(c["l"]) for c in candles if c.get("l") is not None]
+    if len(highs) < period or len(lows) < period:
+        return None
+    upper = max(highs[-period:])
+    lower = min(lows[-period:])
+    middle = (upper + lower) / 2
+    return {
+        "period": period,
+        "upper": round(upper, 5),
+        "middle": round(middle, 5),
+        "lower": round(lower, 5),
+        "width_pips": round(((upper - lower) / 0.0001), 1),
+    }
+
 def get_kraken_ohlc(interval_min, limit=2):
     """
     Fetch OHLC from Kraken. Returns list of candle dicts.
@@ -1415,6 +1480,9 @@ def api_levels():
             session_vwap["window_utc"] = f'{active_session["start_hour"]:02d}:00-{active_session["end_hour"]:02d}:00 UTC'
             session_vwap["sample_size"] = len(session_vwap_candles)
         rsi = calc_rsi(candles_all[-250:] if len(candles_all) > 250 else candles_all, period=14)
+        moving_averages = calc_moving_averages(candles_all[-300:] if len(candles_all) > 300 else candles_all)
+        bollinger = calc_bollinger_bands(candles_all[-120:] if len(candles_all) > 120 else candles_all, period=20, std_mult=2)
+        donchian = calc_donchian_channel(candles_all[-120:] if len(candles_all) > 120 else candles_all, period=20)
 
         # Round all levels to 5dp for clean display
         def rnd(d):
@@ -1435,6 +1503,9 @@ def api_levels():
             "vwap":        vwap,
             "session_vwap": session_vwap,
             "rsi":         rsi,
+            "moving_averages": rnd(moving_averages) if moving_averages else None,
+            "bollinger":   rnd(bollinger) if bollinger else None,
+            "donchian":    rnd(donchian) if donchian else None,
             "source":      ticker.get("source"),
             "ts":          now_utc(),
         }
